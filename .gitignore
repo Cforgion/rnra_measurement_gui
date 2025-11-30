@@ -1,0 +1,48 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.so
+.Python
+
+# Environnements virtuels
+venv/
+env/
+ENV/
+
+# IDE/Editeurs
+.vscode/
+.idea/
+*.swp
+
+# Windows
+Thumbs.db
+Desktop.ini
+`$RECYCLE.BIN/
+
+# Donnees RNRA (gros fichiers)
+data/*.mpa
+data/*.txt
+data/*.xlsx
+data/*.dat
+
+# MAIS garde les petits exemples de test
+!data/test_samples/*.mpa
+!data/test_samples/*.txt
+
+# Fichiers temporaires
+*.tmp
+~`$*.xlsx
+temp/
+tmp/
+
+# Resultats/Sorties
+results/
+output/
+*.png
+*.pdf
+
+# MAIS garde les figures pour le memoire
+!docs/figures/*.png
+!docs/figures/*.pdf
+!docs/out_excel/*.xlsx
