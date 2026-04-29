@@ -75,7 +75,7 @@ From the project root:
 python main.py
 ```
 
-This opens the main window with three tabs: **Conversion**, **Calibration**, and **Processing**.
+This launches the application and opens the main window
 
 ### Typical Workflow
 
@@ -98,7 +98,7 @@ This opens the main window with three tabs: **Conversion**, **Calibration**, and
 6. **Fit sigmoid curves and export results**  
    Apply sigmoid fitting to the raw or cleaned profiles and export the numerical parameters and figures for further analysis.
 
-7. **ANOVA analysis**  
+7. **Optional: ANOVA analysis**  
    Retrieve information on random uncertainty and measurement repeatability from an Excel file (see examples in `data/`) or from the sigmoid fit outputs.
 
 ## Project Structure
