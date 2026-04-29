@@ -14,15 +14,144 @@
 - [10. References](#10-references)
 
 ## 1. Introduction
-- objectif du logiciel.
-- publique cible
+This tool performs the analysis of hydrogen profiling measurements from the raw MPA file to the excitation curve and final sigmoid fit. In addition to the statistical evaluation of repeatability through ANOVA, the workflow includes the propagation of measurement uncertainty at each processing stage, so that the final result reflects not only random variability but also contributions arising from calibration, dead-time correction, and nonlinear sigmoid fitting.
+The uncertainty evaluation is not limited to ANOVA. ANOVA is used to estimate the random component associated with repeated measurements, whereas the full uncertainty budget is obtained by propagating all relevant contributions through the measurement model, including calibration uncertainty, dead-time correction uncertainty, and fit-parameter uncertainty from the sigmoid adjustment. <span style="color:red;">A verifier que c'est bien ce qui est fait ainsi 2 en un budget + ANOVA , c'est ce que je rajoute par rapport a l'année derniere</span>
 
-## 2. scientific principle
-Explication :
-- RNRA
-- Methode ANOVA
-- Hypothese statistique 
-- Test de normalité et homogénité
+## 2. Scientific principle
+ <span style="color:red;"> AJOUTER aussi une section sur le budget d'incertitude.</span>
+### 2.1 Analyse par Réaction Nucléaire Résonante (RNRA)
+
+La Réaction Nucléaire Résonante (RNRA) est une technique d'analyse qui permet de déterminer le profil de concentration d'un élément dans un matériau en fonction de la profondeur. Son principe repose sur l'exploitation d'une réaction nucléaire présentant une résonance à une énergie bien définie : lorsque l'énergie des ions incidents coïncide avec celle de la résonance, la section efficace de réaction atteint un maximum. Il devient ainsi possible de sonder sélectivement une profondeur précise, en exploitant la relation entre l'énergie du faisceau incident et la perte d'énergie des ions dans la matière. La largeur de la résonance, qui définit la plage d'énergies autour de cette valeur pour laquelle la réaction est significative, conditionne directement la résolution en profondeur : plus elle est étroite, plus la précision spatiale est élevée.
+
+Dans notre cas, l'objectif est le profilage de l'hydrogène. Pour ce faire, nous utilisons une pastille de TiH₂, choisie pour sa teneur élevée en hydrogène, son homogénéité et sa stabilité sous irradiation. Les mesures reposent sur les interactions entre des ions ¹⁵N³⁺ et des noyaux ¹H, via la réaction nucléaire suivante :
+
+**¹⁵N(¹H, αγ)¹²C**
+
+Cette réaction présente une forte résonance à 6,385 MeV (largeur 1,8 keV, σ_max = 1650 mb, voir figure 1). À cette énergie, la probabilité d'interaction est maximale, ce qui confère à la méthode une très bonne sélectivité. La réaction se déroule en deux étapes :
+
+1. L'hydrogène interagit avec l'azote 15 pour former un noyau composé transitoire d'oxygène 16 excité.
+2. Ce noyau se désintègre en émettant une particule alpha et un noyau de carbone 12 excité, qui retourne ensuite à son état fondamental en émettant un gamma de 4,43 MeV, lequel est détecté pour quantifier la réaction.
+
+Lors de leur pénétration dans la matière, les ions ¹⁵N³⁺ perdent progressivement de l'énergie selon le pouvoir d'arrêt S = dE/dx, qui dépend à la fois du matériau traversé et de la nature des ions. En faisant varier l'énergie du faisceau incident, il est possible d'associer chaque valeur d'énergie à une profondeur précise dans l'échantillon, permettant ainsi de balayer différentes profondeurs d'analyse (voir figure 2). Pour des énergies incidentes légèrement inférieures à la résonance, peu de gammas sont détectés. Au fur et à mesure que l'énergie s'approche de la résonance, le nombre de gammas émis augmente rapidement, jusqu'à atteindre un plateau où le signal se stabilise. La courbe obtenue présente ainsi une forme sigmoïdale (voir figure 4b), caractéristique de la progression du sondage en énergie.
+
+Toutefois, cette courbe d'excitation ne représente pas directement le profil de concentration. Une étape de déconvolution est nécessaire pour corriger les effets liés à la perte d'énergie du faisceau lors de sa pénétration dans l'échantillon. Cette déconvolution permet de convertir la variation du signal gamma en un profil précis de distribution de l'hydrogène en fonction de la profondeur. À partir des courbes d'excitation déconvoluées, il est ainsi possible d'extraire quantitativement le profil de concentration en hydrogène de l'échantillon analysé (voir le mémoire de Louis Dupont pour une description détaillée de cette démarche).
+
+Le nombre d'événements détectés est donné par [11, 12] :
+
+**N = Q_c · Ω · σ(E_r) · N_t**
+
+où :
+- **Q_c** : charge intégrée, c'est-à-dire la quantité totale de charge portée par les ions ayant frappé la cible. Elle est obtenue en intégrant le courant du faisceau sur la durée d'irradiation et s'exprime en microcoulombs (µC). Divisée par la charge de l'ion incident, elle donne directement le nombre total de particules envoyées sur l'échantillon ; il s'agit d'une grandeur essentielle pour normaliser le signal détecté.
+- **Ω** : angle solide de détection du détecteur (sr).
+- **σ(E_r)** : section efficace à l'énergie de résonance (cm²).
+- **N_t** : densité surfacique d'atomes cibles (at/cm²).
+
+La RNRA est particulièrement bien adaptée à l'analyse d'éléments légers comme l'hydrogène. Ses principaux atouts sont :
+- une **excellente sensibilité** (jusqu'à 10 ppm atomique), permise par la résonance et sa faible largeur ;
+- une **résolution en profondeur optimale**, directement liée à l'étroitesse de la résonance ;
+- une **sélectivité élevée**, le gamma émis à 4,43 MeV étant peu sujet aux interférences (la radioactivité naturelle est en général limitée à environ 3 MeV) ;
+- un **caractère non destructif**, sous réserve de limiter la diffusion de l'hydrogène induite par le faisceau lors de l'analyse.
+
+En revanche, la méthode requiert :
+- un accélérateur de particules ;
+- la prise en compte des effets de matrice, c'est-à-dire l'ensemble des phénomènes liés à la composition et à la structure de l'échantillon susceptibles d'affecter la précision de la mesure.
+
+---
+
+### 2.2 Analyse de variance (ANOVA)
+
+Afin de quantifier la reproductibilité des mesures et d'estimer l'incertitude aléatoire associée, un test ANOVA (ANalysis Of VAriance) est mis en œuvre. Ce test statistique permet de comparer les moyennes de plusieurs groupes — dans notre cas, les moyennes des mesures effectuées lors de différentes journées d'acquisition — afin de déterminer si des différences significatives existent entre eux. Le jeu de données considéré comprend cinq mesures par journée, réalisées sur huit journées distinctes.
+
+Le test ANOVA repose sur un système d'hypothèses [14] :
+- **H₀** (hypothèse nulle) : toutes les moyennes de groupe sont égales, c'est-à-dire qu'il n'existe pas de différence significative entre les journées.
+- **H₁** (hypothèse alternative) : au moins une moyenne de groupe diffère des autres.
+
+La décision d'accepter ou de rejeter H₀ s'appuie sur la **p-valeur** fournie par le test. Cette quantité représente la probabilité de rejeter à tort l'hypothèse nulle lorsqu'elle est vraie (erreur de type I). Par exemple, une p-valeur de 0,23 signifie que, si l'on rejette H₀, on encourt un risque de 23 % de conclure à tort à l'existence d'une différence entre les groupes.
+
+Le test ANOVA peut également être interprété comme une régression linéaire appliquée à des variables catégorielles, selon le modèle [15] :
+
+**ŷ = Σ βᵢGᵢ + ε**
+
+où :
+- **ŷ** est la valeur estimée par le modèle,
+- **Gᵢ** indique l'appartenance d'une observation au groupe *i*,
+- **βᵢ** est la moyenne estimée du groupe *i*,
+- **ε** est le terme d'erreur (résidu).
+
+Les résidus sont définis comme l'écart entre la valeur observée et la valeur estimée :
+
+**res = y_réel − ŷ**
+
+Avant d'appliquer le test ANOVA, trois hypothèses fondamentales doivent être vérifiées pour en garantir la validité :
+- **Indépendance des mesures** : généralement assurée par la rigueur du protocole expérimental.
+- **Normalité des résidus** : vérifiée à l'aide d'outils graphiques tels que le diagramme quantile-quantile (Q-Q plot)¹ (voir figure 6) ou un histogramme, ou encore via des tests formels comme le test de Shapiro-Wilk [16].
+- **Homogénéité des variances** entre les groupes : évaluée graphiquement via un violin plot (voir figure 7) ou par des tests statistiques tels que le test de Levene [17].
+
+Si l'une de ces conditions n'est pas satisfaite, le test ANOVA classique ne peut être appliqué, car ces hypothèses permettent de supposer que la statistique de test suit une loi de Fisher-Snedecor [18].
+
+Lorsque les hypothèses sont respectées, la statistique de test F suit une loi de Fisher-Snedecor à k−1 et k(n−1) degrés de liberté, où k est le nombre de groupes et n le nombre de mesures par groupe (voir figure 8). Cette loi permet de comparer la variance intergroupe à la variance intragroupe : plus la valeur de F est élevée, plus les différences entre groupes sont significatives. Si F dépasse la valeur critique F_critique, déterminée en fonction du niveau de signification α et des degrés de liberté, l'hypothèse nulle est rejetée.
+
+Si les hypothèses de normalité ou d'homogénéité des variances ne sont pas respectées, il convient de recourir à un test non paramétrique, tel que le test de **Kruskal-Wallis** [19]. Ce test est fondé sur le classement des observations plutôt que sur leurs valeurs numériques, et ne suppose pas que les données suivent une loi de Fisher. Il fournit également une p-valeur, interprétable de la même manière.
+
+Le test ANOVA permet également d'estimer l'**incertitude de type aléatoire** associée aux mesures, une approche déjà appliquée avec succès dans le cadre d'autres mesures par faisceau d'ions [20, 21]. Les erreurs systématiques ne sont pas prises en compte par ce modèle. Les variances intra- et intergroupes permettent de calculer les **Mean Squares (MS)**, ou moyennes des carrés :
+
+**MS_inter = SS_inter / (k − 1)**
+
+**MS_intra = SS_intra / (k(n − 1))**
+
+À partir de ces grandeurs, deux composantes d'incertitude sont déduites :
+
+- **Incertitude intergroupe (u_inter)** :
+
+  u_inter = √((MS_inter − MS_intra) / n)
+
+  Si MS_inter < MS_intra, la variance intergroupe est négligeable devant la variance intragroupe, ce qui confirme H₀.
+
+- **Incertitude intragroupe (u_intra)** :
+
+  u_intra = √MS_intra
+
+L'**incertitude combinée** sur les mesures est alors :
+
+**u_c = √(u²_inter + u²_intra)**
+
+Et l'**incertitude relative** (exprimée en %) :
+
+**u_rel = (u_c / ȳ) × 100**
+
+où ȳ est la moyenne générale des mesures.
+
+---
+
+¹ Un quantile est une valeur divisant l'ensemble des données en intervalles contenant le même nombre d'observations. Les quantiles les plus courants sont les quartiles et la médiane.
+
+---
+
+### 2.3 Budget d'incertitude
+
+*[Section à compléter]*
+
+Le budget d'incertitude vise à recenser et à quantifier l'ensemble des sources d'incertitude contribuant à l'incertitude totale sur le résultat de mesure. Conformément au GUM (Guide to the Expression of Uncertainty in Measurement) [réf.], les incertitudes sont classées en deux catégories :
+
+- **Type A** : évaluées par des méthodes statistiques à partir d'une série de mesures répétées (par exemple, via l'ANOVA décrite à la section 2.4).
+- **Type B** : évaluées par d'autres moyens, tels que des données de calibration, des spécifications constructeur ou des estimations expertes.
+
+Les principales sources d'incertitude identifiées dans notre protocole sont les suivantes :
+
+| Source d'incertitude | Type | Valeur estimée | Distribution |
+|---|---|---|---|
+| Statistique de comptage (ROI) | A | *à compléter* | Poisson |
+| Reproductibilité inter-journées | A | *à compléter* (via ANOVA) | Normale |
+| Calibration en énergie | B | *à compléter* | Normale |
+| Normalisation par la charge Q_c | B | *à compléter* | Normale |
+| Correction du temps mort | B | *à compléter* | Rectangulaire |
+| ... | ... | ... | ... |
+
+L'incertitude combinée totale est obtenue par composition quadratique des contributions individuelles, en supposant leur indépendance :
+
+**u_c,total = √(Σ uᵢ²)**
+
+*[Développer ici chaque contribution, son mode d'estimation et sa valeur numérique.]*
 
 ## 3. detailed installation
 Procedure etape par etape
