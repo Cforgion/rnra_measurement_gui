@@ -6,7 +6,11 @@ Application de traitement de données RNRA
 import tkinter as tk
 from tkinter import ttk
 import os
-
+import shutil
+import stat
+import time
+import shutil
+import matplotlib.pyplot as plt
 # Imports des tabs
 from gui.conversion_tab import MPAConvertTab
 from gui.calibration_tab import CalibrationTab
@@ -29,8 +33,15 @@ class RNRAApp(tk.Tk):
             'calibration_results': None,
             'config_path' : None, 
             'group' : None,
+            "uncertainty_budget" : {
+                "calibration": None,
+                "excitation_curve": None,
+                "sigmoid_fit": None,
+                "roi": None,
+            }
         }
         
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         # Créer dossier temp si nécessaire
         os.makedirs(self.app_state['temp_folder'], exist_ok=True)
         
@@ -102,105 +113,46 @@ class RNRAApp(tk.Tk):
         )
     
     def show_uncertainty_budget(self):
-        import tkinter as tk
-        from tkinter import ttk
-    
         win = tk.Toplevel(self)
         win.title("Budget d'incertitude")
-        win.geometry("700x350")
-    
+        win.geometry("700x260")
+
         cols = ("Étape", "Incertitude (%)", "Source", "Commentaire")
         tree = ttk.Treeview(win, columns=cols, show="headings")
+
         for col in cols:
             tree.heading(col, text=col)
             tree.column(col, width=160, anchor="center")
+
         tree.pack(fill="both", expand=True, padx=10, pady=10)
-    
-        calib = self.app_state.get("calibration_results")
-    
-        if calib and "relrmspct" in calib:
-            tree.insert("", "end", values=(
-                "Étalonnage",
-                f"{calib['relrmspct']:.2f}",
-                "Calibration linéaire",
-                "Déjà quantifié"
-            ))
-        else:
-            tree.insert("", "end", values=(
-                "Étalonnage",
-                "N/A",
-                "Calibration linéaire",
-                "Aucune calibration disponible"
-            ))
-    
-        exc_pct = self.tab2.estimate_excitation_uncertainty()
-        sig_pct = self.tab2.estimate_sigmoid_uncertainty()
-        
-        tree.insert("", "end", values=(
-            "Courbe d'excitation",
-            f"{exc_pct:.2f}" if exc_pct is not None else "N/A",
-            "incertitudes / N/C",
-            "Élevé = points expérimentaux dispersés"
-        ))
-        
-        tree.insert("", "end", values=(
-            "Fit sigmoïde",
-            f"{sig_pct:.2f}" if sig_pct is not None else "N/A",
-            "sigma_tot / diff_height",
-            "Élevé = fit peu robuste"
-        ))
-    
-    def estimate_excitation_uncertainty(self):
-        folder = self.output_dir_var.get()
-        if not folder or not os.path.isdir(folder):
-            return None
 
-        vals = []
-        for f in os.listdir(folder):
-            if not f.endswith(".xlsx"):
-                continue
-            try:
-                df = pd.read_excel(os.path.join(folder, f))
-            except Exception:
-                continue
+        budget = self.app_state.get("uncertainty_budget", {})
 
-            if {"N/C", "incertitudes"}.issubset(df.columns):
-                nc = pd.to_numeric(df["N/C"], errors="coerce").values
-                u = pd.to_numeric(df["incertitudes"], errors="coerce").values
-                mask = np.isfinite(nc) & np.isfinite(u) & (np.abs(nc) > 1e-12)
-                if np.any(mask):
-                    vals.extend(np.abs(u[mask] / nc[mask]))
+        rows = [
+            ("Étalonnage", budget.get("calibration")),
+            ("Courbe d'excitation", budget.get("excitation_curve")),
+            ("Fit sigmoïde", budget.get("sigmoid_fit")),
+        ]
 
-        if not vals:
-            return None
-        return 100 * float(np.mean(vals))
-    
-    def estimate_sigmoid_uncertainty(self):
-        folder = self.output_dir_var.get()
-        if not folder:
-            return None
+        for label, item in rows:
+            if item is None:
+                tree.insert("", "end", values=(label, "N/A", "-", "-"))
+            else:
+                value = item.get("value_pct")
+                source = item.get("source", "-")
+                comment = item.get("comment", "-")
 
-        fit_file = os.path.join(folder, "fit_results.xlsx")
-        if not os.path.exists(fit_file):
-            alt = os.path.join(folder, "filtered", "fit_results.xlsx")
-            fit_file = alt if os.path.exists(alt) else fit_file
-
-        if not os.path.exists(fit_file):
-            return None
-
-        df = pd.read_excel(fit_file)
-        if not {"diff_height", "sigma_tot"}.issubset(df.columns):
-            return None
-
-        h = pd.to_numeric(df["diff_height"], errors="coerce").values
-        s = pd.to_numeric(df["sigma_tot"], errors="coerce").values
-        mask = np.isfinite(h) & np.isfinite(s) & (np.abs(h) > 1e-12)
-        if not np.any(mask):
-            return None
-
-        rel = np.abs(s[mask] / h[mask])
-        return 100 * float(np.mean(rel))
-    
+                tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        label,
+                        f"{value:.2f}" if value is not None else "N/A",
+                        source,
+                        comment
+                    )
+                )         
+            
     def new_project(self):
         self.app_state['output_folder'] = None
         self.app_state['conversion_results'] = None
@@ -250,6 +202,35 @@ class RNRAApp(tk.Tk):
             self.tab2.refresh_from_app_state()
 
 
+
+    def _handle_remove_readonly(self, func, path, exc_info):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except Exception as e:
+            print(f"Impossible de supprimer {path}: {e}")
+    
+    def on_close(self):
+        temp_folder = self.app_state.get("temp_folder")
+    
+        try:
+            plt.close("all")
+        except Exception:
+            pass
+        
+        self.destroy()
+    
+        if temp_folder and os.path.isdir(temp_folder):
+            for _ in range(3):
+                try:
+                    shutil.rmtree(temp_folder, onerror=self._handle_remove_readonly)
+                    break
+                except PermissionError as e:
+                    print(f"Suppression temp impossible, nouvelle tentative... {e}")
+                    time.sleep(0.5)
+                except Exception as e:
+                    print(f"Impossible de supprimer le dossier temp : {e}")
+                    break
 if __name__ == '__main__':
     app = RNRAApp()
     app.mainloop()

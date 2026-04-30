@@ -544,6 +544,11 @@ class CalibrationTab(ttk.Frame):
                 "energies": energies,
                 "rel_rms_pct": rel_rms_pct,
             }
+            self.app_state["uncertainty_budget"]["calibration"] = {
+                "value_pct": rel_rms_pct,
+                "source": "Calibration linéaire",
+                "comment": "Erreur RMS relative"
+                    }
     
     def export_results(self):
         """Exporte les pics et, si disponible, le résultat de calibration dans un fichier texte."""

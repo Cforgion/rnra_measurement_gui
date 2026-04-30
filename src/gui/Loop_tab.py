@@ -686,6 +686,64 @@ class loop_tab(ttk.Frame):
         # important : mettre à jour output_dir_var pour les étapes suivantes
         self.output_dir_var.set(output_folder)
         self.has_boucle = True
+        self.update_excitation_uncertainty_in_appstate(output_folder)
+        
+    def update_excitation_uncertainty_in_appstate(self, folder):
+        if not folder or not os.path.isdir(folder):
+            return
+
+        vals = []
+        for fname in os.listdir(folder):
+            if not fname.endswith(".xlsx"):
+                continue
+
+            path = os.path.join(folder, fname)
+            try:
+                df = pd.read_excel(path)
+            except Exception:
+                continue
+
+            if {"N/C", "incertitudes"}.issubset(df.columns):
+                nc = pd.to_numeric(df["N/C"], errors="coerce").to_numpy(dtype=float)
+                u = pd.to_numeric(df["incertitudes"], errors="coerce").to_numpy(dtype=float)
+
+                mask = np.isfinite(nc) & np.isfinite(u) & (np.abs(nc) > 1e-12)
+                if np.any(mask):
+                    vals.extend(np.abs(u[mask] / nc[mask]))
+
+        value_pct = 100.0 * float(np.mean(vals)) if vals else None
+
+        self.app_state["uncertainty_budget"]["excitation_curve"] = {
+            "value_pct": value_pct,
+            "source": "incertitudes / N/C",
+            "comment": "Dispersion moyenne"
+        }
+    
+    def update_sigmoid_uncertainty_in_appstate(self, fit_file):
+        if not fit_file or not os.path.exists(fit_file):
+            return
+
+        try:
+            df = pd.read_excel(fit_file)
+        except Exception:
+            return
+
+        if not {"diff_height", "sigma_tot"}.issubset(df.columns):
+            return
+
+        h = pd.to_numeric(df["diff_height"], errors="coerce").to_numpy(dtype=float)
+        s = pd.to_numeric(df["sigma_tot"], errors="coerce").to_numpy(dtype=float)
+
+        mask = np.isfinite(h) & np.isfinite(s) & (np.abs(h) > 1e-12)
+        rel = np.abs(s[mask] / h[mask]) if np.any(mask) else []
+
+        value_pct = 100.0 * float(np.mean(rel)) if len(rel) else None
+
+        self.app_state["uncertainty_budget"]["sigmoid_fit"] = {
+            "value_pct": value_pct,
+            "source": "sigma_tot / diff_height",
+            "comment": "Robustesse du fit"
+        }
      
     def refresh_from_app_state(self):
         """Synchronise les champs de l'onglet avec l'état partagé."""
@@ -747,7 +805,9 @@ class loop_tab(ttk.Frame):
             inputfolder = os.path.join(base_folder, "filtered")
         else:
             inputfolder = base_folder
-
+        
+        self.update_sigmoid_uncertainty_in_appstate(os.path.join(inputfolder, "fit_results.xlsx"))
+        
         if not os.path.isdir(inputfolder):
             messagebox.showerror("Erreur", f"Dossier d'entrée pour le fit introuvable :\n{inputfolder}")
             return
@@ -765,3 +825,4 @@ class loop_tab(ttk.Frame):
                 "Erreur",
                 f"Une erreur est survenue lors du fit sigmoïde :\n{e}",
             )
+            
