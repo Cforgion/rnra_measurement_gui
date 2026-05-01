@@ -2,63 +2,66 @@
 
 ## Description
 
-This project provides a graphical user interface for processing RNRA (Resonant Nuclear Reaction Analysis) data, from raw acquisition files to final excitation profiles and fitted parameters.  
+This project provides a graphical user interface for processing RNRA (Resonant Nuclear Reaction Analysis) data, from raw acquisition files to final excitation profiles and fitted parameters.
 It automates the conversion of `.mpa` files, energy calibration, ROI integration, optional peak removal, and sigmoid fitting, while tracking uncertainties at each step.
 
 The tool has been developed in the context of thin-layer analysis and depth profiling using the ¹⁵N nuclear resonance, with a focus on reproducible data reduction and quantitative uncertainty estimation.
 
 ## Scientific Context
 
-The application is designed for experiments based on **Resonant Nuclear Reaction Analysis (RNRA)**, where the measured yield as a function of beam energy is used to infer material composition or depth distributions.  
+The application is designed for experiments based on **Resonant Nuclear Reaction Analysis (RNRA)**, where the measured yield as a function of beam energy is used to infer material composition or depth distributions.
 The data reduction pipeline includes:
 
-- Extraction of spectra from raw acquisition files and correction for detector dead time.
-- **Energy calibration** by Gaussian peak fitting and linear regression.
-- Construction of excitation profiles via ROI integration and charge normalization.
-- **Optional build-up peak removal** in a given energy interval.
-- **Sigmoid fitting** of the excitation profiles to extract plateau differences and shape parameters.
+* Extraction of spectra from raw acquisition files and correction for detector dead time.
+* **Energy calibration** by Gaussian peak fitting and linear regression.
+* Construction of excitation profiles via ROI integration and charge normalization.
+* **Optional build-up peak removal** in a given energy interval.
+* **Sigmoid fitting** of the excitation profiles to extract plateau differences and shape parameters.
 
 Future versions may include statistical comparison between samples using ANOVA and additional hypothesis testing.
 
 ## Features
 
-- Batch conversion of `.mpa` acquisition files to structured `.txt` spectra.
-- Automatic extraction of live time and real time, and computation of dead time correction factors.
-- Interactive energy calibration:
-  - Peak selection on spectra,
-  - Gaussian peak fitting,
-  - Linear calibration $E = aC + b$ with uncertainty estimation.
-- ROI integration and normalization by integrated charge to build excitation profiles.
-- Optional removal of build-up peaks around a given energy and generation of diagnostic plots.
-- Sigmoid fitting of excitation profiles and export of fit parameters and figures.
-- Central configuration via Excel files (paths, file ranges, ADC channels, calibration parameters).
-- Uncertainty estimation at several stages (counts, calibration, normalization).
+* Batch conversion of `.mpa` acquisition files to structured `.txt` spectra.
+* Automatic extraction of live time and real time, and computation of dead-time correction factors.
+* Interactive energy calibration:
+
+  * Peak selection on spectra,
+  * Gaussian peak fitting,
+  * Linear calibration $E = aC + b$ with uncertainty estimation.
+* ROI integration and normalization by integrated charge to build excitation profiles.
+* Optional removal of build-up peaks around a given energy and generation of diagnostic plots.
+* Sigmoid fitting of excitation profiles and export of fit parameters and figures.
+* Central configuration via Excel files (paths, file ranges, ADC channels, calibration parameters).
+* Uncertainty estimation at several stages (counts, calibration, normalization).
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.10+
-- Recommended environment: `virtualenv` or `conda`
-
-Required libraries are listed in `requirements.txt` and include at least:
-
-- `numpy`, `scipy`
-- `pandas`
-- `matplotlib`
-- `tkinter` (usually included in the standard Python distribution)
-
-Install the dependencies with:
-
-```bash
-pip install -r requirements.txt
-```
+* Python 3.10+
+* Recommended environment: `virtualenv` or `conda`
 
 ### Clone the Project
 
 ```bash
 git clone https://github.com/Cforgion/rnra_measurement_gui
 cd rnra_measurement_gui
+```
+
+### Install the required libraries
+
+Required libraries are listed in `requirements.txt` and include at least:
+
+* `numpy`, `scipy`
+* `pandas`
+* `matplotlib`
+* `tkinter` (usually included in the standard Python distribution)
+
+Install the dependencies with:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -75,31 +78,31 @@ From the project root:
 python main.py
 ```
 
-This launches the application and opens the main window
+This launches the application and opens the main window.
 
 ### Typical Workflow
 
-1. **Prepare the configuration Excel file**  
-   Define sample names, measurement folders, file ranges, ADC channels, and (optionally) initial calibration parameters, as shown in the `data/` example folder.
+1. **Prepare the configuration Excel file**
+   Define sample names, measurement folders, file ranges, ADC channels, and (optionally) initial calibration parameters, as shown in the `input_mpa.xlsx` example folder.
 
-2. **Convert acquisition files (`.mpa` → `.txt`)**  
+2. **Convert acquisition files (`.mpa` → `.txt`)**
    In the **Conversion** tab, select the configuration file, choose the day/sample root and output folder, then run the conversion.
 
-3. **Calibrate energy**  
-   In the **Calibration** tab, load representative `.txt` spectra, select peaks, fit Gaussians, and run the linear calibration.  
+3. **Calibrate energy**
+   In the **Calibration** tab, load representative `.txt` spectra, select peaks, fit Gaussians, and run the linear calibration.
    Save calibration coefficients back to the configuration file if desired.
 
-4. **Build excitation profiles**  
-   In the **Processing** tab, load the configuration file (if you used the Conversion and Calibration tabs, it will be loaded automatically), define the ROI in energy, and run the loop to integrate counts and normalize by charge.
+4. **Build excitation profiles**
+   In the **Processing** tab, load the configuration file (if you used the Conversion and Calibration tabs, it will be loaded automatically; otherwise, the file must be like in the example `input_loop.xlsx`), define the ROI in energy, and run the loop to integrate counts and normalize by charge.
 
-5. **Optional: remove build-up peaks**  
+5. **Optional: remove build-up peaks**
    Still in the **Processing** tab, specify the resonance energy and removal window, then run the peak-removal routine on the loop outputs. The default values are set for the hydrogen measurement reaction described above.
 
-6. **Fit sigmoid curves and export results**  
+6. **Fit sigmoid curves and export results**
    Apply sigmoid fitting to the raw or cleaned profiles and export the numerical parameters and figures for further analysis.
 
-7. **Optional: ANOVA analysis**  
-   Retrieve information on random uncertainty and measurement repeatability from an Excel file (see examples in `data/`) or from the sigmoid fit outputs.
+7. **Optional: ANOVA analysis**
+   Retrieve information on random uncertainty and measurement repeatability from an Excel file (see examples in `input_anova.xlsx`) or from the sigmoid fit outputs.
 
 ## Project Structure
 
@@ -130,19 +133,24 @@ rnra_gui/
 
 Typical outputs include:
 
-- Text spectra with dead time factor and `(channel, count)` pairs.
-- Excel files with excitation profiles (`Energy keV`, `NC`, `uncertainties`).
-- Cleaned profiles after peak removal, stored in a dedicated subfolder.
-- Sigmoid fit result files (parameters, $R^2$) and `.png` figures showing data and fitted curves.
+* Text spectra with dead-time factor and `(channel, count)` pairs.
+* Excel files with excitation profiles (`Energy keV`, `NC`, `uncertainties`).
+* Cleaned profiles after peak removal, stored in a dedicated subfolder.
+* Sigmoid fit result files (parameters, $R^2$), as well as `.png` and `.xlsx` files for figures showing data and fitted curves.
+* The sigmoid also generates another `.xlsx` file used as input for ANOVA, with the columns `diff_height` and `group`, necessary for ANOVA.
+* ANOVA `.txt` file with statistical results and random uncertainty, and `.png` files for graphs requested by the user for visual verification of hypotheses.
 
 ## Limitations
 
-- The current workflow assumes a predominantly linear detector response in the calibration range.
-- Dead time correction relies on metadata extracted from `.mpa` files; missing or corrupted headers can prevent accurate correction.
-- The uncertainty model is simplified and may not yet include all systematic effects relevant for a full metrological analysis.
-- Peak removal parameters and sigmoid fits should always be validated visually before quantitative interpretation.
+* The current workflow assumes a predominantly linear detector response in the calibration range.
+* Dead-time correction relies on metadata extracted from `.mpa` files; missing or corrupted headers can prevent accurate correction.
+* The uncertainty model is simplified and may not yet include all systematic effects relevant for a full metrological analysis, as discussed in the master’s thesis on the topic.
+* Peak removal parameters and sigmoid fits should always be validated visually before quantitative interpretation.
 
 ## Author
 
-**Cynthia Forgione**  
+**Cynthia Forgione**
 Master in Physics & Data — Université de Namur
+
+---
+

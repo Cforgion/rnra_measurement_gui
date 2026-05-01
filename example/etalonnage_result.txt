@@ -1,5 +1,0 @@
-Pics identifiés pour l'etalonnage : 
-i	canal	Error_centroid 	 signma 	 amplitude 
-4	 1301.296623	 0.568	 38.858	 180.4
-
-Aucun résultat de calibration disponible.
