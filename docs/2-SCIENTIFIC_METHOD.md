@@ -4,14 +4,13 @@
 
 - [1. Introduction](#1-introduction)
 - [2. Scientific Background](#2-scientific-background)
-- [3. Installation](#3-installation)
-- [4. Interface Description](#4-interface-description)
-- [5. Processing Workflow](#5-processing-workflow)
-- [6. Output Files](#6-output-files)
-- [7. Methodological Details](#7-methodological-details)
-- [8. Code Architecture](#8-Code-Architecture)
-- [9. Limitations](#9-limitations)
-- [10. References](#10-references)
+- [3. Interface Description](#4-interface-description)
+- [4. Processing Workflow](#5-processing-workflow)
+- [5. Output Files](#6-output-files)
+- [6. Methodological Details](#7-methodological-details)
+- [7. Code Architecture](#8-Code-Architecture)
+- [8. Limitations](#9-limitations)
+- [9. References](#10-references)
 
 ## 1. Introduction
 This tool performs the analysis of hydrogen profiling measurements from the raw MPA file to the excitation curve and final sigmoid fit. In addition to the statistical evaluation of repeatability through ANOVA, the workflow includes the propagation of measurement uncertainty at each processing stage, so that the final result reflects not only random variability but also contributions arising from calibration, dead-time correction, and nonlinear sigmoid fitting.
@@ -142,7 +141,7 @@ where ȳ is the overall mean.
 
 ### 2.3 Uncertainty budget
 
-## 4. Interface Description
+## 3. Interface Description
 
 ### 4.1 Conversion Window
 
@@ -193,7 +192,7 @@ The **Conversion** tab contains the following elements:
    - The software scans the `mpafolder` corresponding to the selected day in the configuration file, then converts all `.mpa` files found in this folder.  
    - Progress is displayed in the progress bar and status label; detailed messages appear in the log.
 
-5. **Check for errors** 
+4. **Check for errors** 
    - At the end of the process, if errors occurred (missing folder, unreadable `.mpa` file, etc.), they are listed in the log area.  
    - The status label indicates whether the conversion finished successfully or with errors.
 
@@ -310,11 +309,11 @@ The **Calibration** window is organised into three areas:
      - Uncertainty on the centroid.  
    - The peak is added to the Treeview with its centroid and reference energy, and details are appended to the text area.
 
-5. **Repeat for all calibration peaks** 
+4. **Repeat for all calibration peaks** 
    - Repeat steps 2–4 for each reference line you want to include in the calibration.  
    - Once at least two peaks are defined, the **Run calibration** button is enabled.
 
-6. **Run the linear calibration** 
+5. **Run the linear calibration** 
    - Click **Run calibration**.  
    - The software performs a (weighted) linear regression $E = a \cdot C + b$ using the centroids and their uncertainties.  
    - It computes:  
@@ -324,11 +323,11 @@ The **Calibration** window is organised into three areas:
      - Global RMS error and relative RMS (in %).  
    - A summary string is displayed in the calibration result label and in the text area.
 
-7. **Update the configuration file (if applicable)** 
+6. **Update the configuration file (if applicable)** 
    - If the application is used together with the Conversion and Processing tabs, and a global configuration Excel file is defined, the calibration results can be written back into the configuration file for the current group/day.  
    - The corresponding columns (e.g. `slope`, `intercept`, `errorcalib`) are updated for the matching rows, so the processing loop can use them automatically.
 
-8. **Export calibration results (optional)** 
+7. **Export calibration results (optional)** 
    - Click **Export results** to save:  
      - The list of peaks (index, centroid, sigma, amplitude, energy, centroid error),  
      - The linear calibration summary (slope, intercept, uncertainties, $R^2$, relative RMS).  
@@ -475,7 +474,7 @@ These outputs are then used for further analysis, comparison between samples, an
 
 ***
 
-## 5. Processing Workflow (Overview)
+## 4. Processing Workflow (Overview)
 
 This section summarises the recommended end‑to‑end workflow using the three main windows. 
 
@@ -499,7 +498,7 @@ This section summarises the recommended end‑to‑end workflow using the three 
 
 ***
 
-## 6. Output Files (Overview)
+## 5. Output Files (Overview)
 
 The application generates several categories of output files at different stages. 
 
@@ -527,7 +526,7 @@ These outputs can be directly used in subsequent analysis scripts (Python, R, et
 
 
 
-## 7. Methodological Details
+## 6. Methodological Details
 
 ### 7.1 Conversion and Dead Time Correction
 
@@ -875,6 +874,6 @@ Uncertainty estimates are essential for judging the quality and comparability of
 A realistic uncertainty budget is therefore required before any robust statistical comparison between samples can be performed. 
 ### 7.7 Statistical Comparison Using ANOVA
 
-## 8. Code Architecture (optional)
-## 9. Limitations
-## 10. References
+## 7. Code Architecture (optional)
+## 8. Limitations
+## 9. References
