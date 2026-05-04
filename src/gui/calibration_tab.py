@@ -252,7 +252,7 @@ class CalibrationTab(ttk.Frame):
                 df=pd.read_excel(self.app_state['config_path'])
                 if 'group_root'not in df.columns:
                     df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
-                mask = df["group_root"].astype(str) == str(self.app_state['group'])
+                mask = df["group_root"].astype(str) == str(self.current_group)
                 if mask.any() and "data_folder" in df.columns:
                     folders = df.loc[mask, "data_folder"].dropna().unique()
                     if len(folders) > 0:
@@ -563,35 +563,43 @@ class CalibrationTab(ttk.Frame):
                 "energies": energies,
                 "rel_rms_pct": rel_rms_pct,
             }
-        if self.app_state['config_path'] and self.app_state['group']:
-            try:
-                import pandas as pd
-                df = pd.read_excel(self.app_state['config_path'])
+        config_path = self.app_state.get('config_path')
+        group = self.app_state.get('group')
+        print(f"Config path: {config_path}, group: {group}")
+        if not config_path or not group:
+            messagebox.showerror("Erreur", "config_path ou group manquant")
+            return
 
-                if "group_root" not in df.columns:
-                    df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
+        try:
+            import pandas as pd
 
-                mask = df["group_root"].astype(str) == str(self.app_state['group'])
+            df = pd.read_excel(config_path)
 
-                # créer les colonnes si elles n'existent pas
-                for col in ["slope", "intercept", "error_calib"]:
-                    if col not in df.columns:
-                        df[col] = np.nan
+            if "group_root" not in df.columns:
+                df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
 
-                df.loc[mask, "slope"] = a
-                df.loc[mask, "intercept"] = b
-                df.loc[mask, "error_calib"] = rel_rms_pct
-                
-                df.to_excel(self.app_state['config_path'], index=False)
-                messagebox.showinfo(
-                    "Calibration",
-                    f"Calibration enregistrée dans le fichier de config pour le groupe {self.app_state['group']}."
-                )
-            except Exception as e:
-                messagebox.showerror(
-                    "Erreur config",
-                    f"Impossible de mettre à jour le fichier de config :\n{e}"
-                )
+            mask = df["group_root"].astype(str) == str(group)
+
+            if not mask.any():
+                messagebox.showerror("Erreur", f"Aucune ligne pour group = {group}")
+                return
+
+            # colonnes
+            for col in ["slope", "intercept", "error_calib"]:
+                if col not in df.columns:
+                    df[col] = np.nan
+
+            # écriture
+            df.loc[mask, "slope"] = a
+            df.loc[mask, "intercept"] = b
+            df.loc[mask, "error_calib"] = rel_rms_pct
+
+            df.to_excel(config_path, index=False)
+
+            messagebox.showinfo("OK", f"Calibration écrite pour {group}")
+
+        except Exception as e:
+            messagebox.showerror("Erreur Excel", str(e))
     
     def export_results(self):
         """Exporte les pics et, si disponible, le résultat de calibration dans un fichier texte."""

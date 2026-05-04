@@ -124,7 +124,7 @@ class MPAConvertTab(ttk.Frame):
         base = self.output_folder.get().strip()
         group = self.group_root.get().strip()
         config_path = self.app_data.get("config_path")
-    
+        self.app_data["group"] = group
         # 1) Vérifications de base
         if not config_path or not os.path.exists(config_path):
             messagebox.showerror("Erreur", "Aucun fichier de configuration chargé.")
