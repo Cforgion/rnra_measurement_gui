@@ -252,7 +252,7 @@ class CalibrationTab(ttk.Frame):
                 df=pd.read_excel(self.app_state['config_path'])
                 if 'group_root'not in df.columns:
                     df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
-                mask = df["group_root"].astype(str) == str(self.app_state['group'])
+                mask = df["group_root"].astype(str) == str(self.current_group)
                 if mask.any() and "data_folder" in df.columns:
                     folders = df.loc[mask, "data_folder"].dropna().unique()
                     if len(folders) > 0:
@@ -566,15 +566,15 @@ class CalibrationTab(ttk.Frame):
         if self.app_state['config_path'] and self.app_state['group']:
             try:
                 import pandas as pd
-                df = pd.read_excel(self.app_state['config_path'])
+                df = pd.read_excel(self.config_path)
 
                 if "group_root" not in df.columns:
                     df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
 
-                mask = df["group_root"].astype(str) == str(self.app_state['group'])
+                mask = df["group_root"].astype(str) == str(self.current_group)
 
                 # créer les colonnes si elles n'existent pas
-                for col in ["slope", "intercept", "error_calib"]:
+                for col in ["slope", "intercept", "erreur_a", "erreur_b", "R2"]:
                     if col not in df.columns:
                         df[col] = np.nan
 
@@ -582,10 +582,10 @@ class CalibrationTab(ttk.Frame):
                 df.loc[mask, "intercept"] = b
                 df.loc[mask, "error_calib"] = rel_rms_pct
                 
-                df.to_excel(self.app_state['config_path'], index=False)
+                df.to_excel(self.config_path, index=False)
                 messagebox.showinfo(
                     "Calibration",
-                    f"Calibration enregistrée dans le fichier de config pour le groupe {self.app_state['group']}."
+                    f"Calibration enregistrée dans le fichier de config pour le groupe {self.current_group}."
                 )
             except Exception as e:
                 messagebox.showerror(

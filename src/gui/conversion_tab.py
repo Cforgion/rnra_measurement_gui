@@ -214,11 +214,6 @@ class MPAConvertTab(ttk.Frame):
     
             df.loc[mask, "data_folder"] = out_dir
             df.to_excel(config_path, index=False)
-            self.app_data["config_path"] = config_path
-            self.app_data["group"] = group
-            
-            # si tu as une référence sur l’onglet Calibration
-            self.app_data["conversion_results"].set_config_for_group(config_path, group)
             self.log(
                 f"Config mis à jour : data_folder = {out_dir} pour jour {group}."
             )
