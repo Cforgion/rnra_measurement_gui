@@ -119,7 +119,7 @@ This opens the GUI with four tabs:
 A typical project structure is:
 
 ```text
-rnra_measurement_gui/
+rnra_measurement_gui/src
 ├── main.py
 ├── core/
 │   ├── ANOVA.py
@@ -134,9 +134,9 @@ rnra_measurement_gui/
 │   ├── calibration_tab.py
 │   ├── Loop_tab.py
 │   └── ANOVA_tab.py
-├── temp/
+|
 ├── data/
-└── results/
+|  └── temp/
 ```
 
 ## Typical Outputs
