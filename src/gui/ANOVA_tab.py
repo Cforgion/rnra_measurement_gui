@@ -268,43 +268,76 @@ class anova_tab(ttk.Frame):
             return
 
         try:
-            val_col   = self.val_col.get()
+            val_col = self.val_col.get()
             group_col = self.group_col.get()
             data = self.data.copy()
-    
-            # ✅ Nettoyage numérique
-            data[val_col] = pd.to_numeric(data[val_col], errors='coerce')
+
+            data[val_col] = pd.to_numeric(data[val_col], errors="coerce")
             avant = len(data)
             data = data.dropna(subset=[val_col, group_col])
             apres = len(data)
+
             if avant != apres:
                 self.log(f"⚠️ {avant - apres} lignes supprimées (NaN ou non-numériques)")
-    
+
             if data.empty:
                 self.log("❌ Aucune donnée valide après nettoyage")
                 return
-    
-            # ✅ Renommer temporairement pour éviter tout problème patsy
+
             data_clean = data[[val_col, group_col]].copy()
             data_clean.columns = ["value", "group"]
-    
-            model     = ols("value ~ C(group)", data=data_clean).fit()
+
+            model = ols("value ~ C(group)", data=data_clean).fit()
             anova_table = sm.stats.anova_lm(model, typ=2)
-            residus   = model.resid
-    
+            residus = model.resid
+
             self.log("✅ ANOVA calculée")
             self.log(str(anova_table))
 
-            # 🔹 Tests de normalité
-            stat_shapiro, p_shapiro = stats.shapiro(residus)
-            stat_bera, p_bera = stats.jarque_bera(residus)
+            factor_row = "C(group)"
+            if factor_row not in anova_table.index:
+                raise KeyError(f"Aucune ligne dans anova_table ne correspond à '{factor_row}'")
+
+            ss_inter = anova_table.loc[factor_row, "sum_sq"]
+            df_inter = anova_table.loc[factor_row, "df"]
+            ms_inter = ss_inter / df_inter
+
+            cm_resid = (
+                anova_table.loc["Residual", "mean_sq"]
+                if "mean_sq" in anova_table.columns
+                else anova_table.loc["Residual", "sum_sq"] / anova_table.loc["Residual", "df"]
+            )
+
+            n_per_group = data_clean.groupby("group").size().mean()
+            ms_intra = cm_resid
+            u_intra = np.sqrt(ms_intra)
+
+            if ms_inter > ms_intra:
+                u_inter = np.sqrt((ms_inter - ms_intra) / n_per_group)
+            else:
+                u_inter = 0.0
+
+            u_total = np.sqrt(u_intra**2 + u_inter**2)
+            y_mean = data_clean["value"].mean()
+            u_rel = u_total / y_mean if y_mean != 0 else np.nan
+            u_rel_percent = 100 * u_rel
+
+            shapiro = stats.shapiro(residus)
+            p_shapiro = shapiro.pvalue
+
+            jb = stats.jarque_bera(residus)
+            stat_bera = jb.statistic
+            p_bera = jb.pvalue
 
             self.log(f"Shapiro p-value = {p_shapiro:.4f}")
             self.log(f"Jarque-Bera p-value = {p_bera:.4f}")
-
+            self.log(f"Incertitude inter-groupes (u_inter) : {u_inter:.4g}")
+            self.log(f"Incertitude intra-groupes (u_intra) : {u_intra:.4g}")
+            self.log(f"Incertitude totale (u_total) : {u_total:.4g}")
+            self.log(f"Incertitude relative (%) : {u_rel_percent:.2f}%")
             # 🔹 Groupes pour tests non paramétriques
             groupes = [group[val_col].values for _, group in data.groupby(group_col)]
-
+    
             # 🔹 Choix du test
             if p_shapiro > 0.05 and p_bera > 0.05:
                 self.log("✅ ANOVA paramétrique valide")
@@ -320,6 +353,11 @@ class anova_tab(ttk.Frame):
                 path = os.path.join(self.output_dir_var.get(), "anova_results.txt")
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(str(result))
+                    f.write("\n\n")
+                    f.write(f"Incertitude inter-groupes (u_inter) : {u_inter:.4g}\n")
+                    f.write(f"Incertitude intra-groupes (u_intra) : {u_intra:.4g}\n")
+                    f.write(f"Incertitude totale (u_total) : {u_total:.4g}\n")
+                    f.write(f"Incertitude relative (%) : {u_rel_percent:.2f}%\n")
                 self.log(f"💾 Résultats sauvegardés : {path}")
 
             # =========================

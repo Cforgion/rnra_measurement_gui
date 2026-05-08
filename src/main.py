@@ -10,12 +10,14 @@ import shutil
 import stat
 import time
 import shutil
+from tkinter import messagebox
 import matplotlib.pyplot as plt
 # Imports des tabs
 from gui.conversion_tab import MPAConvertTab
 from gui.calibration_tab import CalibrationTab
 from gui.Loop_tab import loop_tab
 from gui.ANOVA_tab import anova_tab
+from core.uncertainty import compute_uncertainty_budget
 
 class RNRAApp(tk.Tk):
     def __init__(self):
@@ -113,45 +115,65 @@ class RNRAApp(tk.Tk):
         )
     
     def show_uncertainty_budget(self):
-        win = tk.Toplevel(self)
-        win.title("Budget d'incertitude")
-        win.geometry("700x260")
+        try:
+            budget = compute_uncertainty_budget(
+                calibration_result=self.app_state.get("calibration_results"),
+                excitation_info=self.app_state.get("uncertainty_budget", {}).get("excitation_curve"),
+                sigmoid_info=self.app_state.get("uncertainty_budget", {}).get("sigmoid_fit"),
+            )
+    
+            if not budget["rows"]:
+                messagebox.showinfo(
+                    "Budget d'incertitude",
+                    "Aucune donnée disponible pour calculer le budget.\n"
+                    "Effectue d'abord l'étalonnage et le traitement."
+                )
+                return
+    
+            self._open_uncertainty_window(budget)
+    
+        except Exception as e:
+            messagebox.showerror(
+                "Erreur",
+                f"Impossible de calculer le budget d'incertitude :\n{e}"
+            )
+    def _open_uncertainty_window(self, budget):
+        window = tk.Toplevel(self)
+        window.title("Budget d'incertitude")
+        window.geometry("900x500")
 
-        cols = ("Étape", "Incertitude (%)", "Source", "Commentaire")
-        tree = ttk.Treeview(win, columns=cols, show="headings")
+        tree = ttk.Treeview(
+            window,
+            columns=("source", "value", "std_unc", "sensitivity", "contribution"),
+            show="headings"
+        )
 
-        for col in cols:
-            tree.heading(col, text=col)
-            tree.column(col, width=160, anchor="center")
+        tree.heading("source", text="Source")
+        tree.heading("value", text="Valeur")
+        tree.heading("std_unc", text="u(x)")
+        tree.heading("sensitivity", text="Coef. sensibilité")
+        tree.heading("contribution", text="Contribution")
 
         tree.pack(fill="both", expand=True, padx=10, pady=10)
 
-        budget = self.app_state.get("uncertainty_budget", {})
+        for row in budget["rows"]:
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    row["source"],
+                    row["value"],
+                    row["std_unc"],
+                    row["sensitivity"],
+                    row["contribution"],
+                )
+            )
 
-        rows = [
-            ("Étalonnage", budget.get("calibration")),
-            ("Courbe d'excitation", budget.get("excitation_curve")),
-            ("Fit sigmoïde", budget.get("sigmoid_fit")),
-        ]
-
-        for label, item in rows:
-            if item is None:
-                tree.insert("", "end", values=(label, "N/A", "-", "-"))
-            else:
-                value = item.get("value_pct")
-                source = item.get("source", "-")
-                comment = item.get("comment", "-")
-
-                tree.insert(
-                    "",
-                    "end",
-                    values=(
-                        label,
-                        f"{value:.2f}" if value is not None else "N/A",
-                        source,
-                        comment
-                    )
-                )         
+        lbl_total = ttk.Label(
+            window,
+            text=f"Incertitude combinée : {budget['combined_uncertainty']:.6g}"
+        )
+        lbl_total.pack(pady=10)
             
     def new_project(self):
         self.app_state['output_folder'] = None

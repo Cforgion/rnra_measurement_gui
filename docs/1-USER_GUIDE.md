@@ -126,8 +126,7 @@ Convert raw `.mpa` files into usable `.txt` spectra.
 
 #### Output
 
-* `.txt` spectra (channel, counts)
-* Dead-time corrected files
+* `.txt` spectra files, each containing a dead-time factor header followed by channel/count data pairs
 
 #### Can be used independently
 
@@ -143,7 +142,7 @@ Yes — this module is only needed if starting from raw data.
 
 Build energy calibration:
 
-\[ E = aC + b \]
+E = a·C + b
 
 #### Entry condition (flexible)
 
@@ -161,17 +160,13 @@ Build energy calibration:
 
 #### Output
 
-Calibration coefficients (a, b) stored either in:
-- the main configuration file (conversion config file), or
-- a separate exported `.txt` file
+Calibration coefficients (a, b), which can be:
+- exported to a standalone `.txt` file for later use, or
+- optionally written back to the project configuration file for automatic integration with the Processing workflow
 
 #### Can be used independently
 
 Yes. The Calibration module works with any `.txt` spectra (from the Conversion module or from external sources).
-
-Calibration results can be:
-- exported to a standalone `.txt` file for later use, or
-- optionally written back to the project configuration file for automatic integration with the Processing workflow.
 
 ---
 
@@ -298,7 +293,7 @@ For each `.mpa` file and ADC channel, one `.txt` file is generated:
 
 ### 6.2 Calibration Tab
 
-The **Calibration** tab builds an energy calibration curve \(E = a \cdot C + b\) from `.txt` spectra.
+The **Calibration** tab builds an energy calibration curve E = a·C + b from `.txt` spectra.
 
 #### Layout and controls
 
@@ -347,14 +342,14 @@ The **Calibration** tab builds an energy calibration curve \(E = a \cdot C + b\)
 
 6. **Run the linear calibration**
    - Click **Run calibration**
-   - The software performs weighted linear regression \(E = a \cdot C + b\)
-   - Results: slope \(a\), intercept \(b\), uncertainties, \(R^2\), relative RMS
+   - The software performs weighted linear regression E = a·C + b
+   - Results: slope a, intercept b, uncertainties, R², relative RMS
 
 7. **Update the configuration file (if applicable)**
-   - Calibration results can be written back to the configuration file
+   - Calibration results can optionally be written back to the configuration file
 
 8. **Export calibration results (optional)**
-   - Click **Export results** to save peaks and calibration summary
+   - Click **Export results** to save peaks and calibration summary to a standalone `.txt` file
 
 ---
 
@@ -440,18 +435,65 @@ The **Processing** tab controls the full data-processing pipeline: ROI integrati
 
 ### 6.4 ANOVA Tab
 
-The **ANOVA** tab performs statistical analysis for repeatability and random uncertainty estimation.
+The **ANOVA** tab performs statistical analysis to evaluate repeatability and estimate random measurement uncertainty.
+
+#### Layout and controls
+
+- **Input file**
+  - **Load** button to select an Excel file (e.g., `input_anova.xlsx`)
+  - The file must contain at least one grouping column and one numerical value column
+
+- **Column selection**
+  - **Group column** selector (e.g., sample, condition, or repetition family)
+  - **Value column** selector (e.g., fitted parameter such as `diff_height`)
+
+- **Diagnostic plots (optional)**
+  - Checkboxes to enable:
+    - Global Q-Q plot
+    - Q-Q plot by group
+    - Histogram of residuals
+    - Boxplot of residuals
+    - Violin plot of residuals
+
+- **Run ANOVA** button to launch the analysis
+
+- **Results area**
+  - ANOVA table
+  - Residual normality tests
+  - Homogeneity checks
+  - Estimated uncertainty terms:
+    - `u_inter`: inter-group contribution
+    - `u_intra`: intra-group contribution
+    - `u_total`: combined ANOVA-related uncertainty
+    - `u_rel_percent`: relative uncertainty (%)
 
 #### User actions
 
 1. **Load ANOVA input file**
-   - Provide an Excel file (e.g., `input_anova.xlsx`) with grouped data
+   - Click **Load** and select an Excel file with grouped data
 
-2. **Run ANOVA analysis**
+2. **Select grouping and value columns**
+   - Choose the relevant columns from the dropdowns
+
+3. **Enable diagnostic plots (optional)**
+   - Check any desired plots before running the analysis
+
+4. **Run ANOVA analysis**
+   - Click **Run ANOVA**
    - The software computes p-value, variance decomposition, and random uncertainty
 
-3. **View results**
-   - Results displayed in text area and diagnostic plots saved
+5. **View results**
+   - Results displayed in the text area
+   - Diagnostic plots saved to the output directory
+
+#### Good practice
+
+The ANOVA tab should not be used with extremely small datasets.
+If a group contains too few points, the variance estimates become unstable and the resulting uncertainty may be artificially inflated.
+As a rule of thumb:
+- fewer than 3 values per group: not recommended
+- 3 values per group: minimum exploratory use
+- 5 or more values per group: preferred for more stable interpretation
 
 ---
 
@@ -534,6 +576,6 @@ This allows:
 
 ## 11. Next Steps
 
-- For detailed scientific methodology and uncertainty propagation, see `METHODOLOGY.md`.
+- For detailed scientific methodology and uncertainty propagation, see `2-SCIENTIFIC_METHOD.md`.
 - For example input files, check the `/examples` folder.
 - For questions or issues, open an issue on [GitHub](https://github.com/Cforgion/rnra_measurement_gui/issues).
