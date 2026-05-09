@@ -153,7 +153,53 @@ where ȳ is the overall mean.
 
 ### 2.3 Uncertainty Budget
 
-*[To be completed. This section should describe the full uncertainty budget combining ANOVA-derived random uncertainty with contributions from calibration, dead-time correction, and sigmoid fit parameters, as detailed in Section 6.6.]*
+The RNRA data processing chain involves three successive stages, each of which introduces uncertainty contributions that are propagated and combined into a global uncertainty budget. The three stages are: energy calibration, excitation profile construction, and sigmoid fitting.
+
+#### 2.3.1 Energy Calibration
+
+The energy calibration establishes the linear relationship E = a·C + b between the ADC channel C and the energy E. The user selects several reference peaks whose centroids are fitted by a Gaussian model, providing for each peak:
+
+- the centroid position in channels,
+- its standard uncertainty,
+- the corresponding reference energy.
+
+A weighted linear regression then yields the calibration coefficients a and b, their standard uncertainties u(a) and u(b), and the associated covariance. The application also computes a **relative RMS error** over all calibration points, reflecting the scatter of residuals in energy space and serving as a global quality indicator for the calibration.
+
+For the uncertainty budget, three contributions are distinguished:
+
+- the global calibration uncertainty (relative RMS error),
+- the contributions associated with the uncertainties on slope a and intercept b,
+- the contributions from the individual centroid uncertainties of each peak, propagated into energy via E = a·C + b.
+
+These contributions are expressed as relative uncertainties and combined in quadrature to obtain a single calibration-related uncertainty term.
+
+#### 2.3.2 Excitation Profiles
+
+Excitation profiles are constructed by integrating, for each beam energy, the number of counts within the selected ROI and normalizing by the integrated charge. For each point on the profile, the application computes an uncertainty on NC = N/Q that accounts for:
+
+- counting statistics,
+- charge normalization uncertainty,
+- the effect of ROI boundary placement and calibration uncertainty.
+
+From these point-by-point uncertainties, a **mean relative dispersion** ⟨u(NC)/NC⟩ is computed over the excitation profile. This quantity is stored as the excitation-profile contribution to the global budget, expressed as a relative uncertainty in percent.
+
+#### 2.3.3 Sigmoid Fitting
+
+The normalized excitation profiles are fitted with a sigmoid function to extract physical parameters such as the plateau difference, midpoint energy, and steepness. From the point uncertainties and the covariance matrix of the fit, the application estimates the uncertainty on the parameters of interest, in particular on the plateau difference ΔH.
+
+For the uncertainty budget, this stage is summarized by a **mean relative uncertainty** on the sigmoid height, constructed from the ratio of the uncertainty on the height parameter (or a combination of fit parameters) to its fitted value. This sigmoid-fit contribution is expressed in percent and integrated into the global budget.
+
+#### 2.3.4 Global Budget
+
+The full uncertainty budget therefore combines the following independent relative contributions:
+
+- calibration uncertainty (relative RMS error, plus terms from u(a), u(b), and centroid uncertainties),
+- mean relative uncertainty from the excitation profiles,
+- mean relative uncertainty from the sigmoid fit.
+
+These contributions are treated as independent relative standard uncertainties (Type A and Type B already expressed numerically) and combined in quadrature to yield the overall combined uncertainty on the output quantity. The application presents this budget as a table listing, for each source, its value, standard uncertainty, sensitivity coefficient, and contribution to the total, alongside the resulting combined uncertainty.
+
+> **Note on ANOVA:** The repeatability-related uncertainty estimated from ANOVA (see Section 2.2 and Section 6.7) represents an additional contribution that can be incorporated into the budget when repeated measurements under reproducibility conditions are available. It is treated as an independent term and combined in quadrature with the contributions above.
 
 ---
 
@@ -170,7 +216,7 @@ The **Conversion** tab contains the following elements:
 
 - **Configuration file (Excel)**
   - Read-only text field displaying the path to the global configuration Excel file.
-  - **Browse** button to select the configuration file (e.g. `config.xlsx`).
+  - **Browse** button to select the configuration file (e.g. `input_mpa.xlsx`).
 
 - **Day root (sample name root)**
   - Text entry (labelled in the interface as *day racine samplename*) where the user enters the day or sample root, such as `250317`.
@@ -810,13 +856,115 @@ The ANOVA-derived uncertainty term (`u_total`) is one of the contributions to th
 
 ## 7. Code Architecture
 
-*[To be completed.]*
+### 7.1 Project Structure
+
+The codebase is organized into two main folders. The `core/` folder contains the scientific computation functions used by the interface. The `gui/` folder contains the graphical interface for each tab. The `temp/` directory is used as a temporary storage location for processing outputs when no output folder has been specified by the user; its contents are cleared when the application is closed.
+
+```text
+rnra_measurement_gui/
+├── main.py
+├── core/
+│   ├── ANOVA.py
+│   ├── file_io.py
+│   ├── calibration.py
+│   ├── Loop_fonction.py
+│   ├── Transform_functions.py
+│   ├── Traitement_fonctions.py
+│   ├── etallonnage.py
+│   └── uncertainty.py
+├── gui/
+│   ├── conversion_tab.py
+│   ├── calibration_tab.py
+│   ├── Loop_tab.py
+│   └── ANOVA_tab.py
+└── temp/
+```
+
+---
+
+### 7.2 Module Responsibilities
+
+#### Interface layer (`gui/` and `main.py`)
+
+- **`main.py`**: entry point of the application. Initializes the Tkinter window, manages tab layout and navigation, maintains the global application state (`app_state`), and provides access to the uncertainty budget interface.
+
+- **`gui/conversion_tab.py`**: graphical interface for converting raw `.mpa` files to `.txt` spectra. Handles file and folder selection, progress display, and conversion log.
+
+- **`gui/calibration_tab.py`**: graphical interface for the channel-to-energy calibration. Handles spectrum loading, interactive peak selection, Gaussian fitting, linear calibration computation, and storage of calibration parameters.
+
+- **`gui/Loop_tab.py`**: graphical interface for the main RNRA processing loop. Manages Excel configuration loading, ROI definition, count integration and normalization, carbon build-up peak removal, sigmoid fitting, and profile export.
+
+- **`gui/ANOVA_tab.py`**: graphical interface for the statistical analysis of sigmoid-derived parameters. Supports one-way ANOVA and Kruskal–Wallis testing, with normality and homogeneity diagnostics and optional diagnostic plot generation.
+
+#### Computation layer (`core/`)
+
+- **`core/calibration.py`**: low-level functions for reading spectra, Gaussian peak fitting, and weighted linear regression from channel to energy. Returns calibration coefficients and their uncertainties.
+
+- **`core/etallonnage.py`**: calibration quality evaluation. Computes the global relative RMS error and the uncertainties associated with the calibration coefficients, based on the covariance matrix of the regression.
+
+- **`core/Loop_fonction.py`**: core logic of the RNRA processing loop. Reads measurement files, integrates counts within the selected ROI, normalizes by integrated charge, constructs excitation profiles, and exports results.
+
+- **`core/Transform_functions.py`**: profile post-processing functions. Includes carbon build-up peak removal by energy window, sigmoid fitting of excitation profiles, and extraction of fit parameters.
+
+- **`core/uncertainty.py`**: computes the global uncertainty budget by aggregating contributions from calibration, excitation profiles, and sigmoid fit. Outputs a structured table of contributions and combined uncertainty.
+
+- **`core/file_io.py`**: file reading and writing utilities shared across modules (`.mpa` parsing, `.txt` and Excel import/export).
+
+- **`core/ANOVA.py`**: statistical analysis functions. Implements one-way ANOVA and Kruskal–Wallis testing, variance decomposition, uncertainty estimation (u_intra, u_inter, u_total), and residual diagnostic tests.
+
+---
+
+### 7.3 Data Flow
+
+The application is organized into two principal layers. The `gui/` modules manage the user interface — windows, controls, and visualization — and delegate all scientific computation to the functions defined in `core/`.
+
+The `core/` modules work directly with spectra and result files: they read raw data, perform numerical processing (calibration, ROI integration, sigmoid fitting, uncertainty propagation, statistical analysis), and write or export results to Excel or text files. They then return results and file paths to the calling GUI tab, which updates the global application state (`app_state`) and displays the results on screen.
+
+This separation ensures that the scientific logic remains independent of the interface and can be called, tested, or extended without modifying the GUI code.
 
 ---
 
 ## 8. Limitations
 
-*[To be completed.]*
+### 8.1 Calibration
+
+- The calibration model assumes a predominantly linear detector response over the selected energy range. Significant non-linearity outside the calibrated interval will degrade the accuracy of the energy conversion.
+- Calibration quality depends on the number and distribution of reference peaks. Too few peaks, or peaks clustered in a narrow channel range, increase the uncertainties on slope and intercept and reduce the reliability of the energy scale.
+- Poor Gaussian convergence for weak, broad, or overlapping peaks can introduce systematic errors in the centroid positions used for calibration.
+
+### 8.2 Dead-Time Correction
+
+- Dead-time correction relies on live-time and real-time metadata extracted from `.mpa` files. Missing, null, or corrupted header values prevent a reliable correction factor from being computed, and the corresponding spectrum must be interpreted with caution.
+- Imperfect parsing of the raw acquisition file structure — if it deviates from the expected format — may silently produce incorrect metadata extraction.
+
+### 8.3 Uncertainty Model
+
+- The current uncertainty model is simplified and may not include every systematic contribution relevant for a full metrological analysis. In particular, it does not yet cover all possible sources of systematic bias (e.g. beam current drift, detector gain instability, or sample inhomogeneity).
+- The Poisson approximation for counting statistics is applied to dead-time-corrected counts, which is a commonly used approximation but not exact.
+- Different uncertainty contributions are combined under the assumption of independence, which may not hold in all experimental conditions.
+
+### 8.4 Peak Removal
+
+- The build-up peak removal algorithm relies on local peak detection within a user-defined energy window. False detections can occur in noisy profiles, leading to incorrect removal of physically meaningful data points.
+- An excessive removal half-width may suppress part of the excitation profile itself, biasing the subsequent sigmoid fit. An insufficient half-width may leave parasitic features in the data.
+- Peak removal results should always be validated visually using the generated diagnostic plots before proceeding to sigmoid fitting.
+
+### 8.5 Sigmoid Fitting
+
+- The sigmoid model assumes a specific functional form for the excitation profile. Profiles that deviate significantly from a standard sigmoid shape (e.g. due to sample inhomogeneity or multiple hydrogen layers) may produce unstable or non-physical fit parameters.
+- Profiles with too few valid points after peak removal may not constrain the fit reliably.
+- Sigmoid fit results should always be checked visually before final interpretation.
+
+### 8.6 ANOVA and Statistical Analysis
+
+- ANOVA-based uncertainty estimation becomes unreliable for very small datasets. Fewer than 3 repeated values per group is not recommended; 5 or more is preferred for stable estimates.
+- The ANOVA model does not account for systematic errors; it estimates only the random component of variability.
+- If residual normality or variance homogeneity assumptions are violated and the non-parametric alternative (Kruskal–Wallis) is used, the uncertainty decomposition into inter- and intra-group components is no longer directly applicable.
+
+### 8.7 Input File Format
+
+- All input Excel files must follow the expected column structure required by each processing tab (Conversion, Calibration, Processing, ANOVA). Non-conforming files will cause errors or silent failures in the processing loop.
+- The software does not currently perform exhaustive validation of input file content beyond checking for the presence of required column names.
 
 ---
 
