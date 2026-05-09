@@ -98,7 +98,7 @@ cd rnra_measurement_gui
 Install the required packages with:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
 
 The project uses at least the following libraries:
