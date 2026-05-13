@@ -26,8 +26,7 @@ class loop_tab(ttk.Frame):
     def __init__(self, parent, app_state):
         super().__init__(parent)
         self.app_state = app_state
-        self.temp_dir = os.path.join(os.path.dirname(__file__), "..","temp")
-        self.temp_dir = os.path.abspath(self.temp_dir)
+        self.temp_dir = os.path.abspath(self.app_state["temp_folder"])
         os.makedirs(self.temp_dir, exist_ok=True)
         self.roi_min = None
         self.roi_max = None
@@ -490,19 +489,19 @@ class loop_tab(ttk.Frame):
         scenarios = self.charger_config_loop()
         if not scenarios:
             return
-
-        sc = scenarios[0]  # pour l'instant, premier sample
+        n = np.random.randint(0, len(scenarios)-1)
+        sc = scenarios[n]  # pour l'instant, premier sample
 
         data_folder = sc["data_folder"]
         numero_file = sc["file_number"]
         last_file = sc["last_file"]
+        first_file = sc["first_file"]
         slope = sc["slope"]
         intercept = sc["intercept"]
-        
-        num_en_str = str('5').zfill(3)
+        file = np.random.randint(first_file, last_file)
+        num_en_str = str(file).zfill(3)
         adc0_file = f"{numero_file}{num_en_str}_ADCDATA0.txt"
         chemin_spectre = os.path.join(data_folder, adc0_file)
-
         if not os.path.exists(chemin_spectre):
             messagebox.showerror(
                 "Erreur",
