@@ -252,7 +252,7 @@ class CalibrationTab(ttk.Frame):
                 df=pd.read_excel(self.app_state['config_path'])
                 if 'group_root'not in df.columns:
                     df["group_root"] = df["sample_name"].astype(str).str.split("_").str[0]
-                mask = df["group_root"].astype(str) == str(self.current_group)
+                mask = df["group_root"].astype(str) == str(self.app_state.get("group"))
                 if mask.any() and "data_folder" in df.columns:
                     folders = df.loc[mask, "data_folder"].dropna().unique()
                     if len(folders) > 0:
@@ -322,7 +322,6 @@ class CalibrationTab(ttk.Frame):
                 fit_res = peak['fit_result']
                 center = fit_res['centroid']
                 sigma = fit_res['sigma']
-                print(fit_res.keys())
                 energy = peak['energy']
                  # Marque le centre
                 self.ax.axvline(
@@ -505,69 +504,115 @@ class CalibrationTab(ttk.Frame):
             )
             return
 
-        # Extraire les canaux (centroides) et les énergies associées
+        # Extraire les canaux (centroïdes) et les énergies associées
         channels = []
         energies = []
-        errors_centroid =[]
+        errors_centroid = []
+
         for peak in self.peaks:
             fit_res = peak["fit_result"]
             channels.append(fit_res["centroid"])
             energies.append(peak["energy"])
             errors_centroid.append(fit_res.get("centroid_error", 1.0))
+
         channels = np.array(channels, dtype=float)
         energies = np.array(energies, dtype=float)
         errors_centroid = np.array(errors_centroid, dtype=float)
-           
+
         try:
-            # adapte à la signature exacte de calibrate_linear
-            # exemple: a, b, R2, y_conv, cov = calibrate_linear(channels, energies)
-            calib_res = calibrate_linear(channels, energies,errors_centroid)
+            calib_res = calibrate_linear(channels, energies, errors_centroid)
         except Exception as e:
             messagebox.showerror("Erreur calibration", str(e))
             return
 
-        # Déballage selon ce que renvoie vraiment calibrate_linear
-        # Si tu sais que c’est (a, b, R2, yconv, cov) comme dans etalonnageavecerreuretR2 [file:13],
-        # alors:
-        a = calib_res['a']
-        b = calib_res['b']
-        R2 = calib_res['R2']
-        err_a = calib_res['error_a']
-        err_b = calib_res['error_b']
-        cov = calib_res.get('covariance')
-        
-        delta_E =deltaE_global_from_polyfit(
-            p =np.array([a,b]),
-            cov =cov,
-            a_coef =a,
-            x_points= channels,
-            sigma_x= errors_centroid
+        # Déballage des résultats
+        a = calib_res["a"]
+        b = calib_res["b"]
+        R2 = calib_res["R2"]
+        err_a = calib_res["error_a"]
+        err_b = calib_res["error_b"]
+        cov = calib_res.get("covariance")
+
+        delta_E = deltaE_global_from_polyfit(
+            p=np.array([a, b]),
+            cov=cov,
+            a_coef=a,
+            x_points=channels,
+            sigma_x=errors_centroid
         )
-        
+
         deltaE_rms = delta_E["deltaE_rms"]
         rel_rms_pct = delta_E["rel_rms_pct"]
+
         txt = (
             f"Calibration: E = {a:.5f} ± {err_a:.5f} * canal + {b:.2f} ± {err_b:.2f}\n"
             f"R² = {R2:.4f}\n"
             f"Erreur relative RMS ≈ {rel_rms_pct:.2f} %"
         )
         self.calib_result_label.config(text=txt, foreground="green")
-
-        # Sauvegarde dans l'état global si disponible
+        # Sauvegarde minimale dans l'état global, même sans config ni groupe
         if hasattr(self, "app_state"):
+            group = self.app_state.get("group")
+
             self.app_state["calibration_results"] = {
+                "group": group,
+                "success": True,
                 "a": a,
                 "b": b,
                 "R2": R2,
                 "channels": channels,
                 "energies": energies,
+                "errors_centroid": errors_centroid,
+                "error_a": err_a,
+                "error_b": err_b,
+                "covariance": cov,
+                "deltaE_rms": deltaE_rms,
                 "rel_rms_pct": rel_rms_pct,
             }
-        config_path = self.app_state.get('config_path')
-        group = self.app_state.get('group')
-        print(f"Config path: {config_path}, group: {group}")
-        if not config_path or not group:
-            messagebox.showerror("Erreur", "config_path ou group manquant")
+
+            # Historique par groupe seulement si un groupe est défini
+            if group is not None:
+                if not isinstance(self.app_state.get("calibration_by_group"), dict):
+                    self.app_state["calibration_by_group"] = {}
+
+                self.app_state["calibration_by_group"][str(group)] = {
+                    "success": True,
+                    "a": a,
+                    "b": b,
+                    "R2": R2,
+                    "channels": channels,
+                    "energies": energies,
+                    "errors_centroid": errors_centroid,
+                    "error_a": err_a,
+                    "error_b": err_b,
+                    "covariance": cov,
+                    "deltaE_rms": deltaE_rms,
+                    "rel_rms_pct": rel_rms_pct,
+                }
+
+                if not isinstance(self.app_state.get("uncertainty_budget"), dict):
+                    self.app_state["uncertainty_budget"] = {}
+
+                if not isinstance(self.app_state["uncertainty_budget"].get("calibration"), dict):
+                    self.app_state["uncertainty_budget"]["calibration"] = {}
+
+                self.app_state["uncertainty_budget"]["calibration"][str(group)] = {
+                    "value_pct": rel_rms_pct,
+                    "deltaE_rms": deltaE_rms,
+                    "source": "deltaE_global_from_polyfit",
+                    "comment": f"Erreur RMS relative d'étalonnage pour le groupe {group}",
+                }
+
+        # Écriture dans le fichier Excel seulement si config_path + group existent
+        config_path = self.app_state.get("config_path") if hasattr(self, "app_state") else None
+        group = self.app_state.get("group") if hasattr(self, "app_state") else None
+
+        if not config_path or group is None:
+            self.results_text.insert(
+                tk.END,
+                "\nℹ Calibration calculée localement (pas de config_path/groupe : pas d'écriture Excel).\n"
+            )
+            self.results_text.see(tk.END)
             return
 
         try:
@@ -581,15 +626,13 @@ class CalibrationTab(ttk.Frame):
             mask = df["group_root"].astype(str) == str(group)
 
             if not mask.any():
-                messagebox.showerror("Erreur", f"Aucune ligne pour group = {group}")
+                messagebox.showwarning("Calibration", f"Aucune ligne trouvée pour group = {group} dans le fichier Excel.")
                 return
 
-            # colonnes
             for col in ["slope", "intercept", "error_calib"]:
                 if col not in df.columns:
                     df[col] = np.nan
 
-            # écriture
             df.loc[mask, "slope"] = a
             df.loc[mask, "intercept"] = b
             df.loc[mask, "error_calib"] = rel_rms_pct
@@ -600,7 +643,7 @@ class CalibrationTab(ttk.Frame):
 
         except Exception as e:
             messagebox.showerror("Erreur Excel", str(e))
-    
+        
     def export_results(self):
         """Exporte les pics et, si disponible, le résultat de calibration dans un fichier texte."""
         if not self.peaks:
@@ -650,7 +693,7 @@ class CalibrationTab(ttk.Frame):
                 f.write("\n")
                 
                 # calibration
-                if calib and calib.get("sucess", False):
+                if calib and calib.get("success", False):
                     a = calib.get("a")
                     b = calib.get("b")
                     R2 = calib.get("R2")

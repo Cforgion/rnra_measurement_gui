@@ -44,19 +44,59 @@ def compute_uncertainty_budget(
     rows = []
 
     # ---------- 1) Étalonnage global ----------
-    if calibration_result is not None:
-        # Erreur RMS relative globale de l'étalonnage en %
-        rel_rms_pct = calibration_result.get("rel_rms_pct", None)
-        if rel_rms_pct is not None:
-            # On l'interprète ici comme incertitude type relative (approche simple)
-            u_rel = float(rel_rms_pct) / 100.0
-            rows.append({
-                "source": "Étalonnage global (RMS relative)",
-                "value": rel_rms_pct,
-                "std_unc": u_rel,
-                "sensitivity": 1.0,
-                "contribution": abs(u_rel),
-            })
+    if calibration_result is not None and isinstance(calibration_result, dict):
+    
+        # Cas A : ancien format simple
+        if "rel_rms_pct" in calibration_result:
+            rel_rms_pct = calibration_result.get("rel_rms_pct", None)
+            if rel_rms_pct is not None:
+                u_rel = float(rel_rms_pct) / 100.0
+                rows.append({
+                    "source": "Étalonnage global (RMS relative)",
+                    "value": rel_rms_pct,
+                    "std_unc": u_rel,
+                    "sensitivity": 1.0,
+                    "contribution": abs(u_rel),
+                })
+
+        # Cas B : nouveau format multi-groupes
+        else:
+            calib_values = []
+
+            for group_name, group_data in calibration_result.items():
+                if not isinstance(group_data, dict):
+                    continue
+
+                rel_rms_pct = group_data.get("rel_rms_pct", None)
+                if rel_rms_pct is None:
+                    continue
+
+                try:
+                    rel_rms_pct = float(rel_rms_pct)
+                except (TypeError, ValueError):
+                    continue
+
+                u_rel = rel_rms_pct / 100.0
+                calib_values.append(u_rel)
+
+                rows.append({
+                    "source": f"Étalonnage groupe {group_name}",
+                    "value": rel_rms_pct,
+                    "std_unc": u_rel,
+                    "sensitivity": 1.0,
+                    "contribution": abs(u_rel),
+                })
+
+            # Optionnel : ligne moyenne globale
+            if calib_values:
+                mean_u = sum(calib_values) / len(calib_values)
+                rows.append({
+                    "source": "Étalonnage moyen (tous groupes)",
+                    "value": 100.0 * mean_u,
+                    "std_unc": mean_u,
+                    "sensitivity": 1.0,
+                    "contribution": abs(mean_u),
+                })
 
     # ---------- 2) Courbes d'excitation ----------
     if excitation_info is not None:
