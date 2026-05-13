@@ -40,20 +40,7 @@ import core.Traitement_fonctions as fonc
 
 def extraire_donnée_excel(folder_path, col_voltage="Tension terminale (kV)",
                           col_energie="Energie (keV)", log_callback=None):
-    """
-    Lit les fichiers Excel du dossier et extrait les colonnes voltage ET énergie.
-    L'énergie est lue directement depuis l'Excel (déjà calculée), plus besoin
-    de energy_conversion().
 
-    Retourne un dict :
-        {
-          "NomFichier_1": {"V": [v1, v2, ...], "E": [e1, e2, ...]},
-          "NomFichier_2": {"V": [...],          "E": [...]},
-          ...
-        }
-    Les suffixes _1, _2 … correspondent aux blocs séparés détectés dans
-    chaque fichier (séparation sur répétition de valeur dans la colonne voltage).
-    """
     def log(msg):
         if log_callback:
             log_callback(msg)
@@ -77,84 +64,63 @@ def extraire_donnée_excel(folder_path, col_voltage="Tension terminale (kV)",
         try:
             xls = pd.ExcelFile(chemin)
             feuille = "Sheet1" if "Sheet1" in xls.sheet_names else xls.sheet_names[0]
-            log(f"📄 Feuille lue : {feuille}")
-
             df = pd.read_excel(xls, sheet_name=feuille, header=None)
 
-            # Supprimer les lignes contenant "K ="
-            df = df[
-                ~df.apply(
-                    lambda row: row.astype(str).str.contains("K =", na=False).any(),
-                    axis=1,
-                )
-            ].reset_index(drop=True)
+            base = os.path.splitext(fichier)[0]
 
-            # La première ligne restante est le header
-            header = df.iloc[0].astype(str).str.strip().tolist()
-            log(f"🔍 Headers détectés : {header}")
-            data = df.iloc[1:].reset_index(drop=True)
-            data.columns = header
+            blocs = []
+            current_block = []
 
-            # Vérifier que les colonnes existent
-            if col_voltage not in header:
-                log(f"⚠️ Colonne '{col_voltage}' introuvable dans {fichier}. Ignoré.")
-                continue
-            if col_energie not in header:
-                log(f"⚠️ Colonne '{col_energie}' introuvable dans {fichier}. Ignoré.")
-                continue
+            for _, row in df.iterrows():
+                row_str = row.astype(str)
 
-            # Extraire et convertir en numérique
-            V_series = pd.to_numeric(data[col_voltage], errors="coerce")
-            E_series = pd.to_numeric(data[col_energie], errors="coerce")
+                # Nouveau bloc quand on rencontre une ligne contenant "K ="
+                if row_str.str.contains("K =", na=False).any():
+                    if current_block:
+                        blocs.append(pd.DataFrame(current_block))
+                        current_block = []
+                    continue
 
-            # Combiner dans un DataFrame propre et supprimer les NaN
-            df_clean = pd.DataFrame({"V": V_series, "E": E_series}).dropna()
+                current_block.append(row.tolist())
 
-            if df_clean.empty:
-                log(f"⚠️ Aucune donnée valide dans {fichier}.")
-                continue
+            if current_block:
+                blocs.append(pd.DataFrame(current_block))
 
-            log(f"🔍 {len(df_clean)} lignes valides extraites.")
+            bloc_index = 1
 
-            # ── Séparation en blocs sur répétition du voltage ──────────
-            blocs_V = []
-            blocs_E = []
-            bloc_V_courant = []
-            bloc_E_courant = []
-            prev_V = None
+            for bloc in blocs:
+                if bloc.empty or len(bloc) < 2:
+                    continue
 
-            for _, row in df_clean.iterrows():
-                v, e = row["V"], row["E"]
-                # Nouveau bloc si la valeur de voltage se répète
-                if prev_V is not None and v == prev_V:
-                    if bloc_V_courant:
-                        blocs_V.append(bloc_V_courant)
-                        blocs_E.append(bloc_E_courant)
-                        bloc_V_courant = []
-                        bloc_E_courant = []
-                bloc_V_courant.append(v)
-                bloc_E_courant.append(e)
-                prev_V = v
+                header = bloc.iloc[0].astype(str).str.strip().tolist()
+                data = bloc.iloc[1:].reset_index(drop=True)
+                data.columns = header
 
-            # Dernier bloc
-            if bloc_V_courant:
-                blocs_V.append(bloc_V_courant)
-                blocs_E.append(bloc_E_courant)
+                if col_voltage not in data.columns or col_energie not in data.columns:
+                    continue
 
-            # Stocker avec suffixe _1, _2, ...
-            base = fichier.replace(".xlsx", "").replace(".xls", "")
-            for i, (bV, bE) in enumerate(zip(blocs_V, blocs_E)):
-                cle = f"{base}_{i + 1}"
-                dict_resultats[cle] = {"V": bV, "E": bE}
-                log(f"  🔑 Bloc '{cle}' : {len(bV)} points  "
-                    f"E={bE[0]:.1f}→{bE[-1]:.1f} keV")
+                V_series = pd.to_numeric(data[col_voltage], errors="coerce")
+                E_series = pd.to_numeric(data[col_energie], errors="coerce")
+                df_clean = pd.DataFrame({"V": V_series, "E": E_series}).dropna()
+
+                if df_clean.empty:
+                    continue
+
+                cle = f"{base}_{bloc_index}"
+                dict_resultats[cle] = {
+                    "V": df_clean["V"].tolist(),
+                    "E": df_clean["E"].tolist(),
+                }
+
+                log(f"  🔑 Bloc '{cle}' : {len(df_clean)} points "
+                    f"E={df_clean['E'].iloc[0]:.1f}→{df_clean['E'].iloc[-1]:.1f} keV")
+
+                bloc_index += 1
 
         except Exception as e:
             log(f"❌ Erreur lors du traitement de {fichier} : {e}")
 
     return dict_resultats
-
-
 # ---------------------------------------------------------------------------
 # Fonctions utilitaires conservées (utilisées ailleurs)
 # ---------------------------------------------------------------------------
@@ -242,7 +208,6 @@ def Boucle_sans_variation(data_entry, path_exit, c_min, c_max, log_callback=None
             col_energie="Energie (keV)",
             log_callback=log,
         )
-
         # Récupérer le bloc correspondant au sample
         bloc = dict_data.get(sample_name)
         if not bloc:

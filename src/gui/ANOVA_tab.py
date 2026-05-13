@@ -286,7 +286,6 @@ class anova_tab(ttk.Frame):
 
             data_clean = data[[val_col, group_col]].copy()
             data_clean.columns = ["value", "group"]
-
             model = ols("value ~ C(group)", data=data_clean).fit()
             anova_table = sm.stats.anova_lm(model, typ=2)
             residus = model.resid
@@ -366,7 +365,7 @@ class anova_tab(ttk.Frame):
 
             # QQ plot global
             if self.qqtot.get():
-                pg.qqplot(residus)
+                pg.qqplot(residus, dist="norm", confidence=0.95,alpha=0.7, color="blue")
                 plt.title("Q-Q plot global")
                 if self.save_var.get():
                     path = os.path.join(self.output_dir_var.get(), "qqplot_global.png")
@@ -378,7 +377,6 @@ class anova_tab(ttk.Frame):
             if self.qqgroup.get():
                 data["residu"] = residus
                 groupes_uniques = data[group_col].unique()
-
                 n = len(groupes_uniques)
                 n_cols = 3
                 n_rows = int(np.ceil(n / n_cols))
@@ -388,7 +386,7 @@ class anova_tab(ttk.Frame):
 
                 for i, g in enumerate(groupes_uniques):
                     resid = data[data[group_col] == g]["residu"]
-                    pg.qqplot(resid, ax=axes[i])
+                    pg.qqplot(resid, dist="norm", confidence=0.95, ax=axes[i], alpha=0.6, color="blue")
                     axes[i].set_title(str(g))
 
                 for j in range(i+1, len(axes)):

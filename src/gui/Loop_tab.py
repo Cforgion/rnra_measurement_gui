@@ -223,6 +223,7 @@ class loop_tab(ttk.Frame):
 
         # --- Récupération du spectre comme dans open_roi_window ---
         scenarios = self.charger_config_loop()
+        
         if not scenarios:
             raise ValueError("Config invalide pour calculer la ROI")
         sc = scenarios[0]
@@ -444,7 +445,6 @@ class loop_tab(ttk.Frame):
             df["slope"] = pd.to_numeric(df["slope"], errors="raise").astype(float)
             df["intercept"] = pd.to_numeric(df["intercept"], errors="raise").astype(float)
             df["erreur_calib"] = pd.to_numeric(df["erreur_calib"], errors="raise").astype(float)
-
         except Exception as e:
             messagebox.showerror(
                 "Erreur",
@@ -494,7 +494,6 @@ class loop_tab(ttk.Frame):
         num_en_str = str(last_file).zfill(3)
         adc0_file = f"{numero_file}{num_en_str}_ADCDATA0.txt"
         chemin_spectre = os.path.join(data_folder, adc0_file)
-        print(chemin_spectre)
 
         if not os.path.exists(chemin_spectre):
             messagebox.showerror(
@@ -613,7 +612,6 @@ class loop_tab(ttk.Frame):
             
             self.roi_min = ch_min
             self.roi_max = ch_max
-            print(ch_min, ch_max)
             
             self.roi_var.set(f"{self.roi_min_e:.1f} – {self.roi_max_e:.1f} keV")
             win.destroy()
