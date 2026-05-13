@@ -118,6 +118,7 @@ The project uses at least the following libraries:
 From the project root, run:
 
 ```bash
+cd ./src/
 python main.py
 ```
 
