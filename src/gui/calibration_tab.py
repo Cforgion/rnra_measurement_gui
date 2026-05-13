@@ -26,7 +26,7 @@ class CalibrationTab(ttk.Frame):
         self.counts = None
         self.deadtime = None
         self.selected_range = None
-        
+        self.current_group_view = None  
         # Stockage des pics  identifiés
         self.peaks = []
         
@@ -35,7 +35,8 @@ class CalibrationTab(ttk.Frame):
     
     def setup_ui(self):
         """Configure l'interface de l'onglet"""
-        
+        self.bind("<Visibility>", self._on_tab_visible)
+        self.bind_all("<Return>", self._invoke_focused_button)
         # Frame principale divisée en 2: contrôles à gauche, graphique à droite
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=5, pady=5)
@@ -78,7 +79,13 @@ class CalibrationTab(ttk.Frame):
             selection_frame,
             text="Energie(keV)"
         ).pack(padx=5, pady=(10,2))
-        self.energy_entry = ttk.Entry(selection_frame, width=15)
+        self.energy_values = ["661.65", "1173.23", "1332.47", "4439"]
+        self.energy_entry = ttk.Combobox(
+            selection_frame,
+            values=self.energy_values,
+            width=15,
+            state="normal"
+        )
         self.energy_entry.pack(padx=5, pady=2)
         # Bouton d'action
         btn_frame = ttk.Frame(selection_frame)
@@ -209,6 +216,12 @@ class CalibrationTab(ttk.Frame):
             text="💾 Exporter résultats",
             command =self.export_results
         ).pack(fill='x', padx=5, pady=5)
+
+    def _invoke_focused_button(self, event=None):
+        widget = self.focus_get()
+        if isinstance(widget, ttk.Button):
+            widget.invoke()
+            return "break"
 
     def compute_half_width(self, center):
         """ Retourne la demi - largeur en fonction de la position du pic ( en cannaux)"""
@@ -524,7 +537,13 @@ class CalibrationTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur calibration", str(e))
             return
-
+        if not calib_res.get("success", False):
+            messagebox.showerror(
+                    "Erreur calibration",
+                    f"Calibration échouée : {calib_res.get('error', 'erreur inconnue')}"
+                    )
+            return
+        
         # Déballage des résultats
         a = calib_res["a"]
         b = calib_res["b"]
@@ -713,18 +732,48 @@ class CalibrationTab(ttk.Frame):
         except Exception as e:
             messagebox.showerror("Erreur export", str(e))
     
-# Test rapide
-if __name__ == "__main__":
-    # Test load_spectrum
-    result = load_spectrum(r"C:\Users\forgi\OneDrive - Université de Namur\MASTER 2\Memoire\251114\24111401XY_ADC0.txt")
-    print(result)
-    
-    # Test fit
-    if result['success']:
-        fit_result = fit_gaussian_in_zone(
-            result['channels'], 
-            result['counts'], 
-            center_approx=500,  # Adapter à ton pic
-            tolerance=50
+    def reset_view_for_group_change(self):
+        """Remet à zéro l'affichage local de l'onglet étalonnage, sans toucher à app_state."""
+        self.spectrum_data = None
+        self.channels = None
+        self.counts = None
+        self.deadtime = None
+        self.selected_range = None
+        self.peaks = []
+
+        self.file_label.config(text="Aucun fichier", foreground="gray")
+        self.deadtime_label.config(text="")
+        self.range_label.config(text="Aucun pic sélectionnée", foreground="gray")
+
+        self.energy_entry.delete(0, tk.END)
+
+        for item in self.peaks_tree.get_children():
+            self.peaks_tree.delete(item)
+
+        self.results_text.delete("1.0", tk.END)
+
+        self.fit_button.config(state="disabled")
+        self.calib_button.config(state="disabled")
+
+        self.calib_result_label.config(
+            text="Minimum 2 pics requis",
+            foreground="gray"
         )
-        print(fit_result)
+
+        self.ax.clear()
+        self.ax.set_xlabel("Canal")
+        self.ax.set_ylabel("Coups")
+        self.ax.set_title("Spectre RNRA")
+        self.ax.grid(True, alpha=0.3)
+        self.canvas.draw_idle()# Test rapide
+
+    def _on_tab_visible(self, event=None):
+        self.refresh_from_app_state()
+
+    def refresh_from_app_state(self):
+        """Synchronise l'onglet avec le groupe courant."""
+        group = self.app_state.get("group")
+
+        if group != self.current_group_view:
+            self.reset_view_for_group_change()
+            self.current_group_view = group

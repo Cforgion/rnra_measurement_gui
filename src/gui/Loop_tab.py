@@ -55,7 +55,7 @@ class loop_tab(ttk.Frame):
     
     def setup_ui(self):
         "configuration de l'interface"
-        
+        self.bind_all("<Return>", self._invoke_focused_button)
         # Frame diviser en 2"
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=5, pady=5)
@@ -139,10 +139,10 @@ class loop_tab(ttk.Frame):
         ttk.Label(ejec_frame, text="Energie centre (keV) :").grid(row=0, column =0, sticky='w')
         ttk.Entry(ejec_frame, textvariable =self.ecenter_var,width = 10).grid (row =0, column= 1 , sticky='w')
         ttk.Label(ejec_frame, text="Fenêtre de recherche (keV) :").grid(row=1, column=0, sticky="w")
-        ttk.Entry(ejec_frame, textvariable=self.window_var, width=10, state ="disabled").grid(row=1, column=1, sticky="w")
+        ttk.Entry(ejec_frame, textvariable=self.window_var, width=10).grid(row=1, column=1, sticky="w")
 
         ttk.Label(ejec_frame, text="Largeur à supprimer (keV) :").grid(row=2, column=0, sticky="w")
-        ttk.Entry(ejec_frame, textvariable=self.half_width_var, width=10, state="disabled").grid(row=2, column=1, sticky="w",)
+        ttk.Entry(ejec_frame, textvariable=self.half_width_var, width=10).grid(row=2, column=1, sticky="w",)
        
         ttk.Button(ejec_frame,
                    text = "Supprimer le pic build-up",
@@ -194,6 +194,14 @@ class loop_tab(ttk.Frame):
         
         self.refresh_from_app_state()
    
+    def _invoke_focused_button(self, event=None):
+        widget = self.focus_get()
+        if isinstance(widget, ttk.Button):
+            widget.invoke()
+            return "break"
+
+
+
     def parse_roi_energy_from_entry(self):
         """
         Lit self.roi_var (ex: '1000-2000' ou '1000 – 2000 keV'),
@@ -491,7 +499,7 @@ class loop_tab(ttk.Frame):
         slope = sc["slope"]
         intercept = sc["intercept"]
         
-        num_en_str = str(last_file).zfill(3)
+        num_en_str = str('5').zfill(3)
         adc0_file = f"{numero_file}{num_en_str}_ADCDATA0.txt"
         chemin_spectre = os.path.join(data_folder, adc0_file)
 

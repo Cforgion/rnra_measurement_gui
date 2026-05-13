@@ -20,6 +20,7 @@ class MPAConvertTab(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self):
+        self.bind_all("<Return>", self._invoke_focused_button)
         main_frame = ttk.Frame(self)
         main_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -85,6 +86,14 @@ class MPAConvertTab(ttk.Frame):
 
         self.log_text.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
         scrollbar.pack(side="right", fill="y", padx=(0, 5), pady=5)
+
+    def _invoke_focused_button(self, event=None):
+        widget = self.focus_get()
+        if isinstance(widget, ttk.Button):
+            widget.invoke()
+            return "break"
+
+
 
     # --- Callbacks UI ---
     def browse_config(self):

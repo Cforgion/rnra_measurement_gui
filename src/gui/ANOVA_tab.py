@@ -45,7 +45,10 @@ class anova_tab(ttk.Frame):
         self.data = None
         
         self.setup_ui()
+    
     def setup_ui(self):
+        self.bind_all("<Return>", self._invoke_focused_button)
+        
         # Frame diviser en 2"
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=5, pady=5)
@@ -177,7 +180,14 @@ class anova_tab(ttk.Frame):
         scollbar.pack(side='right', fill='y', padx=(0,5), pady=5)
         
         #self.refresh_from_app_state()
-        
+
+    def _invoke_focused_button(self, event=None):
+        widget = self.focus_get()
+        if isinstance(widget, ttk.Button):
+            widget.invoke()
+            return "break"
+
+
     def on_ignore_group_checkbox(self, event):
         self.ignore_group_text.SetEditable(self.check_ignore_group.GetValue())
     
