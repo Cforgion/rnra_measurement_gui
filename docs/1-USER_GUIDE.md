@@ -23,15 +23,22 @@
 - [8. Output Files](#8-output-files)
 - [9. Full Pipeline (Optional)](#9-full-pipeline-optional)
 - [10. Key Design Principle](#10-key-design-principle)
-- [11. Next Steps](#11-next-steps)
+- [11. Current Status](#11-current-status)
+- [12. Next Steps](#12-next-steps)
 
 ---
 
 ## 1. Overview
 
-This software processes **RNRA hydrogen profiling data** from raw `.mpa` files to excitation profiles, sigmoid fits, and statistical analysis (ANOVA + uncertainty evaluation).
+This software is intended for the processing of **RNRA hydrogen profiling data** from raw `.mpa` acquisition files to excitation-profile files, optional profile cleaning, sigmoid fitting, and statistical analysis. 
 
-The workflow is designed as a **modular pipeline**, meaning each stage can be executed independently depending on available input data.
+The project follows a **modular workflow**: conversion, calibration, profile processing, and ANOVA can be used as separate steps depending on the available input data. 
+
+At the current stage, the code clearly implements:
+- conversion of `.mpa` files into `.txt` spectra with dead-time information;
+- peak-based linear calibration from channel to energy;
+- ROI integration and charge normalization for excitation-profile construction;
+- optional peak removal, sigmoid fitting, and ANOVA post-processing. 
 
 ---
 
@@ -39,9 +46,13 @@ The workflow is designed as a **modular pipeline**, meaning each stage can be ex
 
 ### Requirements
 
-* Python ≥ 3.10
-* `numpy`, `scipy`, `pandas`, `matplotlib`
-* `tkinter` (standard library)
+- Python ≥ 3.10
+- `numpy`
+- `scipy`
+- `pandas`
+- `matplotlib`
+- `tkinter` (standard library)
+- Additional statistical plotting packages may be required for the ANOVA workflow depending on the environment, such as `seaborn` and `pingouin`. 
 
 ### Setup
 
@@ -51,55 +62,47 @@ cd rnra_measurement_gui
 pip install -r requirements.txt
 ```
 
-> **Note:** Use PowerShell (Windows), Terminal (macOS), or your preferred shell (Linux).
+> **Note:** Use PowerShell (Windows), Terminal (macOS), or your preferred shell (Linux). 
 
 ### Running
 
-Once the setup is done, to run the code at any time you need to be in the folder `rnra_measurement_gui` and run the following command:
+Once the setup is complete, run the application from the project folder:
 
 ```bash
 python main.py
 ```
 
-Alternatively, you can use VS Code to run the code by opening the project folder and clicking the "Run" button, provided Python is properly configured in VS Code.
+If you use VS Code, you can also open the project folder and launch the main script from the editor, provided Python is properly configured. 
 
 ---
 
 ## 3. Modular Workflow Concept
 
-The software is structured into **four independent modules**:
+The software is organized around **four main processing blocks**:
 
-| Module      | Purpose                    | Required Input     |
-| ----------- | -------------------------- | ------------------ |
-| Conversion  | Convert raw `.mpa` files   | `input_mpa.xlsx`   |
-| Calibration | Energy calibration         | `.txt` spectra     |
-| Processing  | Excitation profiles + fits | `input_loop.xlsx`  |
-| ANOVA       | Statistical analysis       | `input_anova.xlsx` |
+| Module | Purpose | Main input |
+|--------|---------|------------|
+| Conversion | Convert raw `.mpa` files into text spectra | Raw `.mpa` files and conversion settings |
+| Calibration | Build a linear energy calibration | `.txt` spectra |
+| Processing | Build excitation profiles from integrated spectra | Processing Excel file and calibrated data |
+| ANOVA | Statistical analysis of grouped results | Excel table of grouped values |
 
-### ⚠️ Key concept
-
-Each module:
-
-* can be run independently
-* requires standardized inputs
-* produces outputs usable by downstream modules
+Each block can be used independently if the required inputs are already available. For example, calibration can be done directly from existing `.txt` spectra, and ANOVA can be run on already exported fit results. 
 
 ---
 
 ## 4. Input Files
 
-The workflow is driven by Excel configuration files. Each file corresponds to a **specific entry point in the pipeline**.
+The workflow uses several input files depending on the entry point chosen by the user. 
 
-* `input_mpa.xlsx` → raw acquisition conversion setup  
-  ➜ start from `.mpa` files
+Typical inputs are:
 
-* `input_loop.xlsx` → excitation profile construction  
-  ➜ start from calibrated `.txt` spectra
+- `input_mpa.xlsx` for raw acquisition conversion settings. 
+- `input_loop.xlsx` for excitation-profile construction. 
+- `input_anova.xlsx` for grouped statistical analysis. 
+- `.txt` spectrum files for calibration. These files contain channel/count values and may include a dead-time header generated during conversion. 
 
-* `input_anova.xlsx` → statistical analysis (ANOVA)  
-  ➜ start from processed excitation profiles
-
-📁 Example files are available in the `/examples` folder.
+For the processing stage, the code also relies on Excel-based measurement tables and on external energy values read from Excel files during the loop. In the current implementation, energy points are not described only by the ROI definition itself; they are also retrieved from dedicated Excel data used by the loop. 
 
 ---
 
@@ -107,475 +110,251 @@ The workflow is driven by Excel configuration files. Each file corresponds to a 
 
 ### 5.1 Conversion Module (Raw → Spectra)
 
-**Tab: Conversion**
+**Purpose**
 
-#### Purpose
+Convert raw `.mpa` acquisition files into `.txt` spectra usable by the downstream workflow. 
 
-Convert raw `.mpa` files into usable `.txt` spectra.
+**What the code does**
 
-#### Entry condition
+For each `.mpa` file, the converter scans ADC sections, extracts `livetime` and `realtime`, computes a dead-time factor as `realtime / livetime`, and exports one text spectrum per ADC channel. 
 
-* Requires: `input_mpa.xlsx`
+**Output**
 
-#### Actions
+Each exported `.txt` file contains:
+1. a header line with the dead-time factor;
+2. two data columns corresponding to channel index and counts. 
 
-* Load configuration file
-* Select sample/day root
-* Define output folder
-* Run conversion
+**Independent use**
 
-#### Output
-
-* `.txt` spectra files, each containing a dead-time factor header followed by channel/count data pairs
-
-#### Can be used independently
-
-Yes — this module is only needed if starting from raw data.
+Yes. This module is only required when starting from raw `.mpa` files. 
 
 ---
 
 ### 5.2 Calibration Module (Channel → Energy)
 
-**Tab: Calibration**
+**Purpose**
 
-#### Purpose
+Build a linear calibration of the form:
 
-Build energy calibration:
+\(E = aC + b\)
 
-E = a·C + b
+from reference peaks identified in spectrum files. 
 
-#### Entry condition (flexible)
+**What the code does**
 
-* Requires: `.txt` spectra
-* Can come from:
-  * Conversion module, OR
-  * external pre-processed data
+The calibration module loads a `.txt` spectrum, extracts the channel/count data, optionally reads the dead-time factor from the first line, fits Gaussian peaks with a local linear background, and then performs a weighted linear regression using the fitted centroid uncertainties. 
 
-#### Actions
+**Current calibration model**
 
-* Load spectrum
-* Select peaks
-* Fit Gaussian peaks
-* Perform linear calibration
+- Peak model: Gaussian peak with linear background. 
+- Final regression: weighted linear fit \(E = aC + b\) with weights based on centroid uncertainties. 
 
-#### Output
+**Output**
 
-Calibration coefficients (a, b), which can be:
-- exported to a standalone `.txt` file for later use, or
-- optionally written back to the project configuration file for automatic integration with the Processing workflow
+The code returns calibration coefficients, their uncertainties, the covariance matrix, and \(R^2\). 
 
-#### Can be used independently
+**Independent use**
 
-Yes. The Calibration module works with any `.txt` spectra (from the Conversion module or from external sources).
+Yes. The calibration logic works directly from `.txt` spectra and does not require the conversion step if suitable text spectra already exist. 
+
+> **Important:** The current code clearly computes calibration coefficients, but automatic writing of these coefficients back into a project configuration Excel file should only be documented if that behavior is explicitly confirmed in the GUI layer. 
 
 ---
 
 ### 5.3 Processing Module (Excitation Profiles)
 
-**Tab: Processing**
+**Purpose**
 
-#### Purpose
+Build excitation profiles by integrating counts in a selected ROI and normalizing the result by the collected charge. 
 
-Build excitation profiles and perform advanced analysis.
+**What the code does**
 
-#### Entry condition
+The processing loop reads measurement information from Excel input files, opens the relevant spectrum files, integrates counts inside a ROI, applies dead-time correction, computes the collected charge, and exports excitation-profile results to Excel. 
 
-* Requires: `input_loop.xlsx`
-* Requires: existing calibration
+**Important implementation note**
 
-#### Actions
+In the current processing logic, the ROI integration is performed using **channel bounds** (`c_min`, `c_max`) and not only as a direct energy interval typed by the user. The energy associated with each output point is read separately from Excel-based input data used by the loop. 
 
-* Define ROI in energy
-* Run integration loop
-* Normalize by charge
-* Optional:
-  * peak removal
-  * sigmoid fitting
+**Optional post-processing**
 
-#### Output
+Additional functions are available to:
+- remove a local build-up peak near a chosen energy window from exported profile files;
+- fit a sigmoid model to processed profiles and extract parameters. 
 
-* Excitation profiles (Energy vs NC)
-* Filtered datasets
-* Sigmoid fit parameters
+**Output**
 
-#### Can be used independently
-
-Yes — if a calibration already exists.
+The processing stage produces excitation-profile Excel files containing at least:
+- energy values;
+- normalized counts (`N/C`);
+- associated uncertainties. 
 
 ---
 
 ### 5.4 ANOVA Module (Statistical Analysis)
 
-**Tab: ANOVA**
+**Purpose**
 
-#### Purpose
+Evaluate repeatability and estimate a random uncertainty contribution from grouped measurement results. 
 
-Evaluate repeatability and random uncertainty.
+**What the code does**
 
-#### Entry condition
+The ANOVA function fits a one-way model, computes the ANOVA table, extracts residuals, and estimates a total uncertainty from intra-group and inter-group variance terms. 
 
-* Requires: `input_anova.xlsx`
-* Requires: excitation profiles
+**Current implementation note**
 
-#### Output
+The present code uses `n_per_group = 5` inside the uncertainty calculation. This means the current implementation assumes five values per group for the inter-group uncertainty term and should not yet be described as fully generic. 
 
-* p-value
-* variance decomposition
-* random uncertainty estimate
+**Available outputs**
+
+- ANOVA table;
+- residuals;
+- total uncertainty estimate;
+- relative uncertainty in percent. 
+
+The ANOVA module also includes helper functions for histogram, boxplot, violin plot, and Q-Q plot generation. 
 
 ---
 
 ## 6. Interface Description
 
-This section describes the graphical interface for each tab in detail.
+This section describes the intended role of each tab while remaining consistent with the currently visible processing code. Some GUI details may evolve, but the scientific role of each tab is already defined by the underlying modules. 
 
 ### 6.1 Conversion Tab
 
-The **Conversion** tab performs batch conversion of raw `.mpa` acquisition files into structured `.txt` spectra.
+The **Conversion** tab is used to batch-convert raw `.mpa` files into `.txt` spectra. 
 
-#### Layout and controls
+Typical user actions are:
+1. select the conversion-related input information;
+2. choose an output folder;
+3. launch conversion;
+4. inspect conversion logs and errors. 
 
-- **Configuration file (Excel)**
-  - Read-only text field displaying the path to the global configuration Excel file
-  - **Browse** button to select the configuration file (e.g., `config.xlsx`)
-
-- **Day root (sample name root)**
-  - Text entry where the user enters the day or sample root (e.g., `250317`)
-  - This value filters rows in the configuration file corresponding to a given measurement day
-
-- **Output folder for .txt files**
-  - Text entry displaying the path where converted `.txt` files will be written
-  - **Browse** button to choose or create this directory
-
-- **Conversion controls**
-  - **Convert .mpa → .txt** button to start the conversion for the selected day
-  - Progress bar indicating current file index and total number of files
-  - Status label showing "Waiting", "Conversion in progress…", "Finished", or "Finished with errors"
-
-- **Log window**
-  - Multi-line text area showing detailed messages about folders, files, and errors
-
-#### User actions
-
-1. **Load the configuration file**
-   - Click **Browse** in the "config Excel" section
-   - Select the Excel configuration file describing your measurements
-   - The selected path appears in the read-only entry
-
-2. **Define the day root**
-   - In the **day root** entry, type the day/sample root (e.g., `250317`)
-   - The software looks for rows in the configuration file matching this root
-
-3. **Choose the output folder for `.txt` files**
-   - Click **Browse** and select a directory
-   - The program creates a subfolder named after the day root (e.g., `.../250317/`)
-
-4. **Launch the conversion**
-   - Click **Convert .mpa → .txt**
-   - Progress is displayed in the progress bar and log
-
-5. **Check for errors**
-   - At the end, any errors are listed in the log area
-   - The status label indicates success or errors
-
-#### Output text file structure
-
-For each `.mpa` file and ADC channel, one `.txt` file is generated:
-
-- **File naming**: `filename_ADCname.txt`  
-  Example: `sample01_ADC1.txt`
-
-- **File content**:
-  1. **Header line**: Dead time factor (e.g., `Dead time factor = 1.023`)
-  2. **Data lines**: Two columns — `Channel` (integer) and `Count` (measured counts)
+Each generated text file follows the pattern `baseName_ADCx.txt` and contains a dead-time header plus channel/count values. 
 
 ---
 
 ### 6.2 Calibration Tab
 
-The **Calibration** tab builds an energy calibration curve E = a·C + b from `.txt` spectra.
+The **Calibration** tab is used to load a spectrum, identify reference peaks, fit them, and derive a linear channel-to-energy relation. 
 
-#### Layout and controls
+The underlying calibration code supports:
+- spectrum loading from `.txt`;
+- dead-time header reading when present;
+- Gaussian peak fitting around an approximate center and tolerance;
+- weighted linear regression from fitted peak centroids. 
 
-- **Left panel – File and peak management**
-  - **Load spectrum** button to select a `.txt` spectrum file
-  - File information labels showing filename and dead time factor
-  - Peak selection area with instruction label and interval display
-  - **Energy (keV)** entry field for reference energy
-  - **Fit Gaussian** button to launch peak fit
-  - **Reset selection** button to clear current selection
-  - **Peak list (Treeview)** with columns: Index, Channel, Energy (keV)
-  - **Delete selected peak** and **Clear all peaks** buttons
-  - **Run calibration** button (enabled when ≥2 peaks defined)
-  - Calibration result label
-
-- **Center panel – Spectrum and fits**
-  - Matplotlib figure displaying spectrum (counts vs. channel)
-  - Interactive **SpanSelector** for channel interval selection
-  - Zoom/pan tools (Matplotlib toolbar)
-  - Fitted peaks shown as vertical lines and Gaussian curves
-
-- **Right panel – Detailed results and export**
-  - Text area listing spectrum info, peak fit details, and calibration results
-  - **Export results** button to save peaks and calibration summary
-
-#### User actions
-
-1. **Load a spectrum**
-   - Click **Load spectrum** and select a `.txt` file
-   - The spectrum is displayed with dead time factor
-
-2. **Select a peak**
-   - Click and drag on the spectrum (SpanSelector), OR
-   - Simply click to set an approximate center
-   - The selection is displayed as `center = ..., width = ...`
-
-3. **Associate a reference energy**
-   - Type the known energy in the **Energy (keV)** entry
-
-4. **Fit a Gaussian peak**
-   - Click **Fit Gaussian**
-   - The peak is fitted and added to the Treeview
-
-5. **Repeat for all calibration peaks**
-   - Add ≥2 peaks to enable calibration
-
-6. **Run the linear calibration**
-   - Click **Run calibration**
-   - The software performs weighted linear regression E = a·C + b
-   - Results: slope a, intercept b, uncertainties, R², relative RMS
-
-7. **Update the configuration file (if applicable)**
-   - Calibration results can optionally be written back to the configuration file
-
-8. **Export calibration results (optional)**
-   - Click **Export results** to save peaks and calibration summary to a standalone `.txt` file
+The exact GUI layout may evolve, but the calibration logic already corresponds to this workflow. 
 
 ---
 
 ### 6.3 Processing Tab
 
-The **Processing** tab controls the full data-processing pipeline: ROI integration, peak removal, and sigmoid fitting.
+The **Processing** tab is dedicated to excitation-profile construction and related post-processing. 
 
-#### Layout and controls
+In the current code base, the core operations are:
+- loop over configured measurements;
+- integrate counts in a ROI;
+- normalize by collected charge;
+- export profile tables;
+- optionally clean profiles and fit a sigmoid. 
 
-- **Configuration and ROI (left panel)**
-  - **Configuration file** section with path display and **Load** button
-  - **ROI selection** entry (energy range in keV)
-  - **Choose ROI on a spectrum** button for interactive selection
-  - **Save results** checkbox and output folder entry with **Browse** button
-  - **Process files** button to start the loop
-
-- **Carbon build-up peak removal**
-  - **Energy center (keV)**: resonance energy (default ~6385 keV)
-  - **Search window (keV)**: energy window for peak search
-  - **Removal half-width (keV)**: interval to remove
-  - **Remove build-up peak** button
-
-- **Sigmoid fitting**
-  - **Run sigmoid fit on output profiles** button
-
-- **Visualization options**
-  - **Display output profile** button to view `.xlsx` or `.png` files
-
-- **Right panel – Plot and detailed log**
-  - Matplotlib figure with axes labeled "Energy (keV)" and "NC"
-  - Zoom/pan toolbar
-  - Text area for detailed log messages
-
-#### User actions
-
-**A. Loop over ROI**
-
-1. **Load the configuration file**
-   - Click **Load Excel configuration file**
-   - The program checks required columns
-
-2. **Define the ROI in energy**
-   - **Manual**: type ROI in keV (e.g., `6400–6600 keV`)
-   - **Interactive**: click **Choose ROI on a spectrum** to select graphically
-
-3. **Choose whether to save results**
-   - Check **Save results** and choose output folder, or use temp directory
-
-4. **Run the processing loop**
-   - Click **Process files**
-   - For each scenario, the program integrates counts, normalizes by charge, and builds excitation profiles
-
-**B. Peak removal (optional)**
-
-1. **Set the build-up energy and windows**
-   - Keep default (6385 keV) or adjust
-
-2. **Apply the removal to all profiles**
-   - Click **Remove build-up peak**
-   - Filtered profiles saved in `filtered/` subfolder
-
-**C. Sigmoid fit**
-
-1. **Select the input folder for fitting**
-   - Uses `filtered/` if peak removal was performed, otherwise raw output
-
-2. **Run the sigmoid fits**
-   - Click **Run sigmoid fit on output profiles**
-   - Extracts plateau values, midpoint, width
-   - Results saved to output directory
-
-**D. Visualization**
-
-1. **Open a processed profile or image**
-   - Click **Display output profile**
-   - Select `.xlsx` or `.png` file
-
-2. **Inspect the result**
-   - Profile plotted with optional error bars
-   - Images displayed directly
+To avoid ambiguity, the documentation should state that the present implementation combines ROI channel integration with externally read energy values from Excel tables. It should not state that the profile is built only from a directly selected energy ROI unless that exact behavior is confirmed in the GUI code. 
 
 ---
 
 ### 6.4 ANOVA Tab
 
-The **ANOVA** tab performs statistical analysis to evaluate repeatability and estimate random measurement uncertainty.
+The **ANOVA** tab is intended for grouped statistical analysis of exported results such as fit parameters or other scalar quantities. 
 
-#### Layout and controls
+The current analysis functions support one-way ANOVA, residual extraction, uncertainty estimation, and optional diagnostic plotting. 
 
-- **Input file**
-  - **Load** button to select an Excel file (e.g., `input_anova.xlsx`)
-  - The file must contain at least one grouping column and one numerical value column
-
-- **Column selection**
-  - **Group column** selector (e.g., sample, condition, or repetition family)
-  - **Value column** selector (e.g., fitted parameter such as `diff_height`)
-
-- **Diagnostic plots (optional)**
-  - Checkboxes to enable:
-    - Global Q-Q plot
-    - Q-Q plot by group
-    - Histogram of residuals
-    - Boxplot of residuals
-    - Violin plot of residuals
-
-- **Run ANOVA** button to launch the analysis
-
-- **Results area**
-  - ANOVA table
-  - Residual normality tests
-  - Homogeneity checks
-  - Estimated uncertainty terms:
-    - `u_inter`: inter-group contribution
-    - `u_intra`: intra-group contribution
-    - `u_total`: combined ANOVA-related uncertainty
-    - `u_rel_percent`: relative uncertainty (%)
-
-#### User actions
-
-1. **Load ANOVA input file**
-   - Click **Load** and select an Excel file with grouped data
-
-2. **Select grouping and value columns**
-   - Choose the relevant columns from the dropdowns
-
-3. **Enable diagnostic plots (optional)**
-   - Check any desired plots before running the analysis
-
-4. **Run ANOVA analysis**
-   - Click **Run ANOVA**
-   - The software computes p-value, variance decomposition, and random uncertainty
-
-5. **View results**
-   - Results displayed in the text area
-   - Diagnostic plots saved to the output directory
-
-#### Good practice
-
-The ANOVA tab should not be used with extremely small datasets.
-If a group contains too few points, the variance estimates become unstable and the resulting uncertainty may be artificially inflated.
-As a rule of thumb:
-- fewer than 3 values per group: not recommended
-- 3 values per group: minimum exploratory use
-- 5 or more values per group: preferred for more stable interpretation
+Because the current uncertainty expression uses a fixed `n_per_group = 5`, users should prepare grouped datasets accordingly or treat the result as specific to that current implementation. 
 
 ---
 
 ## 7. Typical Workflow
 
-This section summarizes the recommended end-to-end workflow.
+A typical use case is:
 
-1. **Configure and convert**
-   - Prepare the Excel configuration file
-   - Use the **Conversion** tab to convert `.mpa` files to `.txt` spectra
+1. Convert raw `.mpa` files into `.txt` spectra. 
+2. Perform calibration from known peaks in selected spectra. 
+3. Run the processing loop to build excitation profiles. 
+4. Optionally remove a local build-up peak from exported profiles. 
+5. Optionally fit sigmoid functions to the processed profiles. 
+6. Use the exported scalar results for ANOVA-based repeatability analysis. 
 
-2. **Calibrate energy**
-   - In the **Calibration** tab, load spectra, identify peaks, and run calibration
-   - Store calibration coefficients in the configuration file
-
-3. **Process profiles**
-   - In the **Processing** tab, define ROI and run the loop
-   - Optionally remove carbon build-up peak
-
-4. **Fit and analyze**
-   - Perform sigmoid fits on excitation profiles
-   - Use exported files for further analysis and ANOVA
+This workflow is recommended, but not mandatory. Each step can be reused independently when its input files already exist. 
 
 ---
 
 ## 8. Output Files
 
-The application generates several categories of output files:
+The application can generate several categories of output files.
 
 - **Converted spectra (`.txt`)**
-  - Location: subfolder named after day root (e.g., `.../250317/`)
-  - One file per `.mpa` and ADC channel
-  - Header: dead time factor; body: channel, count pairs
+  - one file per `.mpa` and ADC section;
+  - dead-time factor in the header;
+  - channel/count pairs in the body. 
 
-- **Calibration exports**
-  - Optional `.txt` files with peak list and calibration parameters
-  - Calibration coefficients may also be written to configuration Excel file
+- **Calibration results**
+  - calibration coefficients and regression quality indicators returned by the calibration functions;
+  - optional text export or GUI-managed reporting depending on the interface implementation. 
 
-- **Loop / ROI integration outputs**
-  - Excel files with excitation profiles: energy, normalized counts, uncertainties
-  - Organized per sample/scenario
+- **Excitation-profile files (`.xlsx`)**
+  - energy values;
+  - normalized counts `N/C`;
+  - uncertainty values. 
 
-- **Filtered profiles (after peak removal)**
-  - Stored in `filtered/` subfolder
+- **Cleaned profile files**
+  - generated after local peak removal;
+  - saved as `_cleaned.xlsx`. 
 
-- **Sigmoid fit results and images**
-  - Numerical summaries of fit parameters
-  - Plots (`.png`) showing data and fitted curves
+- **Sigmoid-fit outputs**
+  - per-profile fit curves saved to Excel;
+  - summary file such as `fit_results.xlsx`;
+  - plot images saved during fitting. 
 
-These outputs can be used in subsequent analysis scripts and statistical post-processing (ANOVA, uncertainty propagation).
+- **ANOVA diagnostic plots**
+  - histogram, boxplot, violin plot, and Q-Q plots when enabled in the statistical workflow. 
 
 ---
 
 ## 9. Full Pipeline (Optional)
 
-If starting from raw data:
+If starting from raw data, the complete workflow is:
 
+```text
+Conversion → Calibration → Processing → Optional cleaning / sigmoid fit → ANOVA
 ```
-Conversion → Calibration → Processing → ANOVA
-```
+
+This sequence matches the current project logic more closely than a stricter pipeline that would assume every step is always automated inside a single run. 
 
 ---
 
 ## 10. Key Design Principle
 
-The software does **not** enforce a strict pipeline.
+The software does **not** enforce a single rigid pipeline. 
 
-Instead:
-
-> Each module is independent but interoperable through standardized file formats.
-
-This allows:
-
-* starting at any stage
-* reprocessing only part of the workflow
-* integrating external datasets
-* iterative calibration and analysis
+Instead, the project is designed so that each module can be reused as a scientific processing block with standardized intermediate files. This makes it possible to start from raw data, existing spectra, already exported profiles, or grouped result tables depending on the analysis need. 
 
 ---
 
-## 11. Next Steps
+## 11. Current Status
 
-- For detailed scientific methodology and uncertainty propagation, see `2-SCIENTIFIC_METHOD.md`.
-- For example input files, check the `/examples` folder.
-- For questions or issues, open an issue on [GitHub](https://github.com/Cforgion/rnra_measurement_gui/issues).
+This project should currently be presented as a **first functional version** of the RNRA processing workflow rather than as a fully finalized end-user application. 
+
+The scientific core already includes:
+- `.mpa` to `.txt` conversion with dead-time handling;
+- linear calibration from fitted peaks;
+- ROI-based profile construction with charge normalization;
+- profile cleaning, sigmoid fitting, and ANOVA tools. 
+
+However, documentation should remain cautious about any feature that depends on GUI behavior not explicitly verified in the current code review, such as automatic configuration-file updates or fully generic ANOVA settings. 
+
+---
+
+## 12. Next Steps
+
+- For the scientific rationale and uncertainty treatment, see `2-SCIENTIFIC_METHOD.md`. 
+- For example input files, use the project examples if available in the repository structure. 
+- For development updates or issues, use the project GitHub repository. 
