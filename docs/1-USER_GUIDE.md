@@ -202,7 +202,7 @@ The ANOVA function fits a one-way model, computes the ANOVA table, extracts resi
 
 **Current implementation note**
 
-The present code uses `n_per_group = 5` inside the uncertainty calculation. This means the current implementation assumes five values per group for the inter-group uncertainty term and should not yet be described as fully generic. 
+The present code uses the mean group size as the effective number of observations per group in the uncertainty calculation. This means the implementation adapts to the actual number of values per group, and is no longer restricted to exactly five replicates.
 
 **Available outputs**
 

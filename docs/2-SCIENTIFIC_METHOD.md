@@ -65,7 +65,8 @@ In the existing code, the ANOVA function:
 - retrieves the ANOVA table;
 - identifies the line corresponding to the group factor to compute \(MS_\text{inter}\);
 - uses the residual mean square as \(MS_\text{intra}\);
-- assumes **five values per group** via a hard-coded `n_per_group = 5`; 
+- uses an effective number of observations per group defined as the mean group size,
+i.e. $n_{eff}=mean(group sizes)$, when computing the inter-group uncertainty term.
 - computes: 
 
 \[
