@@ -268,7 +268,12 @@ The **ANOVA** tab is intended for grouped statistical analysis of exported resul
 
 The current analysis functions support one-way ANOVA, residual extraction, uncertainty estimation, and optional diagnostic plotting. 
 
-Because the current uncertainty expression uses a fixed `n_per_group = 5`, users should prepare grouped datasets accordingly or treat the result as specific to that current implementation. 
+Because the current uncertainty expression derives the inter‑group
+component from the ANOVA mean squares using an effective number of
+observations per group based on the actual group sizes, users should
+ensure that the grouped datasets are reasonably balanced and that the
+assumptions of one‑way ANOVA (normality and homoscedasticity) are
+checked using the provided diagnostic plots.
 
 ---
 

@@ -318,6 +318,7 @@ class anova_tab(ttk.Frame):
             )
 
             n_per_group = data_clean.groupby("group").size().mean()
+            print(n_per_group)
             ms_intra = cm_resid
             u_intra = np.sqrt(ms_intra)
 

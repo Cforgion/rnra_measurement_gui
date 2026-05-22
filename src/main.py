@@ -18,7 +18,7 @@ from gui.calibration_tab import CalibrationTab
 from gui.Loop_tab import loop_tab
 from gui.ANOVA_tab import anova_tab
 from core.uncertainty import compute_uncertainty_budget
-
+from core.deadtime_stats import compute_deadtime_stats_by_day
 class RNRAApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -80,7 +80,6 @@ class RNRAApp(tk.Tk):
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
-
     def on_tab_changed(self, event):
         current_tab = event.widget.select()
         tab_widget = event.widget.nametowidget(current_tab)
@@ -109,6 +108,7 @@ class RNRAApp(tk.Tk):
         # Menu Analyse
         analysis_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Analyse", menu=analysis_menu)
+        
         analysis_menu.add_command(
             label="Budget d'incertitude",
             command=self.show_uncertainty_budget
@@ -121,7 +121,11 @@ class RNRAApp(tk.Tk):
                 excitation_info=self.app_state.get("uncertainty_budget", {}).get("excitation_curve"),
                 sigmoid_info=self.app_state.get("uncertainty_budget", {}).get("sigmoid_fit"),
             )
-    
+
+            conversion_results = self.app_state.get("conversion_results")
+            files_data = conversion_results.get("files_data", []) if conversion_results else []
+            dt_stats = compute_deadtime_stats_by_day(files_data, adc_name="ADC0")
+
             if not budget["rows"]:
                 messagebox.showinfo(
                     "Budget d'incertitude",
@@ -129,52 +133,105 @@ class RNRAApp(tk.Tk):
                     "Effectue d'abord l'étalonnage et le traitement."
                 )
                 return
-    
-            self._open_uncertainty_window(budget)
-    
+
+            self._open_uncertainty_window(budget, dt_stats)
+
         except Exception as e:
             messagebox.showerror(
                 "Erreur",
                 f"Impossible de calculer le budget d'incertitude :\n{e}"
             )
-    def _open_uncertainty_window(self, budget):
+            
+    def _open_uncertainty_window(self, budget, dt_stats= None):
         window = tk.Toplevel(self)
         window.title("Budget d'incertitude")
-        window.geometry("900x500")
+        window.geometry("950x700")
+
+        # ── Section 1 : Budget d'incertitude ─────────────────────────────
+        ttk.Label(window, text="Budget d'incertitude",
+                  font=("TkDefaultFont", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 2))
+
+        frame_budget = ttk.Frame(window)
+        frame_budget.pack(fill="both", expand=True, padx=10, pady=(0, 4))
 
         tree = ttk.Treeview(
-            window,
+            frame_budget,
             columns=("source", "value", "std_unc", "sensitivity", "contribution"),
-            show="headings"
+            show="headings", height=8,
         )
-
-        tree.heading("source", text="Source")
-        tree.heading("value", text="Valeur")
-        tree.heading("std_unc", text="u(x)")
-        tree.heading("sensitivity", text="Coef. sensibilité")
+        tree.heading("source",       text="Source")
+        tree.heading("value",        text="Valeur (%)")
+        tree.heading("std_unc",      text="u(x)")
+        tree.heading("sensitivity",  text="Coef. sensibilité")
         tree.heading("contribution", text="Contribution")
+        tree.column("source",       width=280)
+        tree.column("value",        width=90,  anchor="center")
+        tree.column("std_unc",      width=90,  anchor="center")
+        tree.column("sensitivity",  width=110, anchor="center")
+        tree.column("contribution", width=100, anchor="center")
 
-        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        sb = ttk.Scrollbar(frame_budget, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        tree.pack(fill="both", expand=True)
 
         for row in budget["rows"]:
-            tree.insert(
-                "",
-                "end",
-                values=(
-                    row["source"],
-                    row["value"],
-                    row["std_unc"],
-                    row["sensitivity"],
-                    row["contribution"],
-                )
-            )
+            tree.insert("", "end", values=(
+                row["source"],
+                f"{row['value']:.4g}",
+                f"{row['std_unc']:.4g}",
+                f"{row['sensitivity']:.4g}",
+                f"{row['contribution']:.4g}",
+            ))
 
-        lbl_total = ttk.Label(
+        ttk.Label(
             window,
-            text=f"Incertitude combinée : {budget['combined_uncertainty']:.6g}"
+            text=f"Incertitude combinée : {budget['combined_uncertainty']:.6g}",
+            font=("TkDefaultFont", 10, "bold"),
+        ).pack(anchor="w", padx=10, pady=(0, 8))
+
+        ttk.Separator(window, orient="horizontal").pack(fill="x", padx=10, pady=4)
+
+        # ── Section 2 : Temps mort moyen par jour ─────────────────────────
+        ttk.Label(window, text="Temps mort moyen par jour de mesure (ADC0 – gamma)",
+                  font=("TkDefaultFont", 11, "bold")).pack(anchor="w", padx=10, pady=(4, 2))
+
+        frame_dt = ttk.Frame(window)
+        frame_dt.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        tree_dt = ttk.Treeview(
+            frame_dt,
+            columns=("jour", "mean", "std", "n"),
+            show="headings", height=6,
         )
-        lbl_total.pack(pady=10)
-            
+        tree_dt.heading("jour", text="Jour (YYMMDD)")
+        tree_dt.heading("mean", text="F_dead moyen")
+        tree_dt.heading("std",  text="Écart-type")
+        tree_dt.heading("n",    text="N spectres")
+        tree_dt.column("jour", width=130, anchor="center")
+        tree_dt.column("mean", width=120, anchor="center")
+        tree_dt.column("std",  width=110, anchor="center")
+        tree_dt.column("n",    width=90,  anchor="center")
+
+        sb_dt = ttk.Scrollbar(frame_dt, orient="vertical", command=tree_dt.yview)
+        tree_dt.configure(yscrollcommand=sb_dt.set)
+        sb_dt.pack(side="right", fill="y")
+        tree_dt.pack(fill="both", expand=True)
+
+        if dt_stats is not None and not dt_stats.empty:
+            import math
+            for _, r in dt_stats.iterrows():
+                std_val = f"{r['deadtime_std']:.5f}" if not math.isnan(r["deadtime_std"]) else "—"
+                tree_dt.insert("", "end", values=(
+                    r["jour"],
+                    f"{r['deadtime_mean']:.5f}",
+                    std_val,
+                    int(r["n_files"]),
+                ))
+        else:
+            tree_dt.insert("", "end",
+                           values=("—", "Aucune donnée (conversion non effectuée)", "—", "—"))
+
     def new_project(self):
         self.app_state['output_folder'] = None
         self.app_state['conversion_results'] = None

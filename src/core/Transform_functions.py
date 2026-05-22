@@ -8,7 +8,7 @@ from scipy.optimize import curve_fit
 
 
 
-def remove_peak_by_energy(input_folder, output_folder, image_folder, log_callback = None,  ecenter =6385.0, window = 200.0,):
+def remove_peak_by_energy(input_folder, output_folder, image_folder, log_callback = None,  ecenter =6385.0, window = 200.0,selected_groups=None,):
     """
     Removes 'carbon build-up' type peaks from Excel files in the folder.
     Saves the cleaned files and the graphs.
@@ -26,6 +26,10 @@ def remove_peak_by_energy(input_folder, output_folder, image_folder, log_callbac
 
     files = [f for f in os.listdir(input_folder) if f.endswith(".xlsx")]
     print(f"files: {files}")
+
+    if selected_groups:
+        selected_groups = set(str(g) for g in selected_groups)
+        files = [f for f in files if assign_group(f) in selected_groups]
     if not files:
         log("❌ No Excel files found.")
         return
@@ -148,7 +152,9 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
     output_file = os.path.join(os.path.dirname(output_path), "fit_results.xlsx")
     base_dir = os.path.dirname(output_path)
     excel_dir = os.path.join(base_dir, "fits_data")
+    image_dir = os.path.join(output_path, "fit_images")
     os.makedirs(excel_dir, exist_ok=True)
+    os.makedirs(image_dir, exist_ok=True)
     print("Fichier ciblé :", output_file)
     print("Existe :", os.path.exists(output_file))
     if os.path.exists(output_file):

@@ -102,7 +102,7 @@ At a conceptual level, you can keep the structure “calibration → excitation 
 
 You should therefore avoid any sentence suggesting that the code “propagates analytically all contributions at each stage of the full measurement model”. It is safer to say that:
 
-> “The current version builds a global uncertainty budget from relative contributions provided by the calibration, excitation-curve and sigmoid-fit stages, and combines them in quadrature.”
+> “The current version builds a global uncertainty budget from relative contributions provided by the calibration stage and by the sigmoid‑fit stage, and combines them in quadrature. The profile‑point uncertainties enter the budget through the sigmoid fitting, where they are used as sigma in the weighted fit and thus propagated to the fitted quantity."
 
 ---
 
@@ -204,15 +204,19 @@ A methodologically accurate workflow aligned with the code is:
 
 ## 5. Output Files
 
-This section peut rester proche de ta version actuelle, mais en ajustant quelques formulations pour correspondre aux fichiers réellement produits:
+The application can generate the following output files:
 
-- `.txt` spectra with “Dead time factor = …” and two numeric columns; 
-- calibration result exports (if implemented in the GUI), including peaks, coefficients and quality metrics; 
-- excitation-profile Excel files with columns “numero_fichier”, “N/C”, “incertitudes”, “Energie(keV)”; 
-- cleaned profiles suffixed `_cleaned.xlsx` plus PNG plots of removed peaks; 
-- sigmoid fit results in `fit_results.xlsx`, per-profile Excel `fits_data/*.xlsx` and PNG images with data + fitted curve; 
-- ANOVA diagnostic plots (histogram, boxplot, violin plot, Q‑Q plots). 
+-  `.txt` spectra containing a header line of the form “Dead time factor = …” followed by two numeric columns;
 
+- calibration result exports, if implemented in the GUI, including fitted peaks, calibration coefficients, and quality metrics;
+
+- excitation-profile Excel files with the columns numero_fichier, N/C, incertitudes, and Energie(keV);
+
+- cleaned profile files saved with the suffix `_cleaned.xlsx`, together with PNG plots showing the removed peak region;
+
+- sigmoid-fit outputs, including `fit_results.xlsx`, per-profile Excel files in `fits_data/*.xlsx`, and PNG images showing experimental points and the fitted sigmoid curve;
+
+- ANOVA diagnostic plots, such as histograms, boxplots, violin plots, and Q-Q plots, when enabled in the analysis workflow
 ---
 
 ## 6. Methodological Details
@@ -259,23 +263,28 @@ E = a C + b
 
 with weights \(w_i = 1/\sigma_{x_{0,i}}^2\), giving \(a\), \(b\), their standard uncertainties, covariance matrix, and \(R^2\). 
 
-If you mention “relative RMS error”, it must correspond to the residual RMS computed in your calibration quality script and stored as `rel_rms_pct` in the app state. 
+If you mention “relative RMS error”, it must correspond to the residual RMS computed in your calibration quality script and stored as `rel_rms_pct`  in the application state before being used by `uncertainty.py`. 
 
 ### 6.3 ROI Integration, Normalization and Point Uncertainty
 
-The key difference with ta version initiale est que:
+- The key difference with ta version initiale est que:
 
-- la ROI est définie en **canaux** (c\_min, c\_max); 
-- l’intégration se fait sur les canaux de l’ADC gamma, avec interpolation linéaire si les bornes ne sont pas entières; 
-- la charge est prise sur le canal ADCDATA3 et convertie en microcoulombs par un facteur \(10^{-4}\). 
+- The ROI is defined in channels (c_min, c_max).
 
-Pour chaque fichier:
+- Integration is performed on the gamma ADC spectrum, with linear interpolation if the ROI bounds are not integers.
+
+- Charge is read from the ADCDATA3 channel and converted to microcoulombs using a factor of $10^{-4}$
+
+
+
+For each file, the implemented processing steps are:
 
 1. Read the dead-time factor from the header of the ADC spectrum file.
-2. Integrate counts within the channel ROI with linear interpolation at edges when needed.
-3. Sum charge counts on the charge file and multiply by \(10^{-4}\) to obtain the integrated charge \(Q\). 
-4. Apply dead-time correction:
 
+2. Integrate counts within the channel ROI, with linear interpolation at the boundaries when required.
+
+3. Sum the charge counts on the charge file and multiply by $10^{-4}$to obtain the integrated charge Q.
+4. Apply the dead-time correction:
 \[
 N = N_\text{ROI} \cdot F_\text{dead}
 \]
@@ -320,117 +329,183 @@ u(R) = R \sqrt{\left(\frac{\sigma_N}{N}\right)^2 + \left(\frac{\sigma_Q}{Q}\righ
 
 if \(N > 0\) and \(Q > 0\); otherwise the code returns NaN. 
 
-Tu peux conserver ton texte explicatif mais il doit suivre exactement cette structure de propagation, qui est celle réellement utilisée.
 
 ### 6.4 Peak Removal and Data Cleaning
 
-`Transform_functions.py` implémente la suppression du pic de “carbon build‑up” et la génération de graphiques: 
+`Transform_functions.py` implements the removal of the local “carbon build-up” peak and generates the corresponding plots. 
 
-- pour chaque fichier Excel contenant une courbe excitation:
-  - tri des points par énergie croissante;
-  - sélection d’une fenêtre \([E_\text{center} - \text{window}, E_\text{center} + \text{window}]\);
-  - détection des pics dans `N/C` dans cette fenêtre (`find_peaks`);
-  - sélection du pic le plus proche de \(E_\text{center}\);
-  - suppression des points dans \([E_\text{pic} - \text{halfwidth}, E_\text{pic} + \text{halfwidth}]\);
-  - sauvegarde du fichier nettoyé et d’une figure montrant données brutes et filtrées. 
+For each Excel file containing an excitation curve, the routine:
+  - sorts the data points by increasing energy;
+  - selects a window \([E_\text{center} - \text{window}, E_\text{center} + \text{window}]\);
+  - detects peaks in the`N/C` data within this window using `find_peaks`;
+  - selects the peak closest to \(E_\text{center}\);
+  - removes the points in the interval\([E_\text{pic} - \text{halfwidth}, E_\text{pic} + \text{halfwidth}]\);
+  - saves the cleaned file and a plot comparing the raw and filtered data.
 
-Tu peux garder l’idée de “peak removal par fenêtre en énergie” en précisant que la méthode repose sur `find_peaks`, un choix de fenêtre autour de 6385 keV par défaut, et la suppression d’un intervalle fixe autour du pic détecté.
 
 ### 6.5 Sigmoid Fitting and Parameter Extraction
 
-`fit_to_profile` dans `Transform_functions.py` prend les fichiers Excel (nettoyés ou non), lit les colonnes “Energie(keV)”, “N/C”, “incertitudes”, nettoie les valeurs non finies, puis: 
+`fit_to_profile` in `Transform_functions.py` processes cleaned or uncleaned excitation-profile Excel files. It reads the columns “Energie(keV)”, “N/C”, “incertitudes”,  removes invalid values, and then performs the following steps.
 
-- construit un masque pour garder seulement les points valides;
-- ordonne les points par énergie si besoin;
-- définit un jeu de paramètres initiaux \(p_0 = [L, x_0, k, b]\);
-- appelle `curve_fit` avec:
-  - modèle sigmoïde \(y(x) = L / (1 + \exp(-k(x - x_0))) + b\);
-  - `sigma=y_error`, `absolute_sigma=True`, méthode `dogbox`, bornes appropriées; 
-- obtient les paramètres ajustés et la matrice de covariance;
-- calcule le plateau effectif `Real_height = L - b`;
-- calcule \(R^2\);
-- calcule une quantité `Ucc_tot = sqrt(perr[0] + perr[3])` comme mesure d’incertitude globale liée à \(L\) et \(b\); 
-- construit un DataFrame de résultats avec:
-  - nom du fichier;
+- build a mask to keep only valid points;
+- sort the data by increasing energy if needed;
+- define an initial parameter set \(p_0 = [L, x_0, k, b]\);
+- call  `curve_fit` with:
+  - the sigmoid model \(y(x) = L / (1 + \exp(-k(x - x_0))) + b\);
+  - `sigma=y_error`;
+  - `absolute_sigma=True`;
+  - the `dogbox`method;
+  - appropriate parameter bounds; 
+- obtain the fitted parameters and the covariance matrix;
+- compute the effective plateau height `diif_height = L - b`;
+- compute \(R^2\);
+- compute the quantity `Ucc_tot = sqrt(perr[0] + perr[3])` as a global uncertainty indicator associated with the parameters 
+ \(L\) and \(b\); 
+- build a results table containing:
+  - file name;
   - \(L\), \(b\), \(x_0\), \(k\);
-  - `diff_height` (hauteur du plateau);
+  - `diff_height` (plateau height);
   - `sigma_tot` (`Ucc_tot`);
-  - un champ `group` (issu de `assign_group`), utilisé ensuite pour ANOVA. 
-- sauvegarde les courbes (données + fit) dans des Excel séparés et des PNG. 
+  - a `group` fild deriverd from `assign_group`, later used for ANOVA;
+- ssave per-profile data-and-fit curves into Excel files and PNG images.
 
-Le texte doit dire que la contribution “sigmoid” du budget d’incertitude se base sur ces paramètres et sur cette quantité `Ucc_tot`, résumée ensuite en un pourcentage dans l’interface avant d’être passée à `compute_uncertainty_budget`. 
+
 
 ### 6.6 Construction of the Uncertainty Budget
 
-`core/uncertainty.py` ne refait pas la propagation analytique, mais assemble des contributions relatives déjà calculées en amont: 
+The `core/uncertainty.py` module does not re‑implement a full analytical
+propagation through every parameter of the measurement model. Instead, it
+assembles **relative standard uncertainties** that have already been computed
+upstream and combines them in quadrature. [file:153]
 
-- `calibration_result` doit contenir soit:
-  - un champ `rel_rms_pct` pour la calibration globale; soit
-  - un dictionnaire par groupe, chacun avec son `rel_rms_pct`; 
-- `excitation_info` est un dictionnaire avec `value_pct` (par exemple une moyenne des \(u(NC)/NC\) en %);
-- `sigmoid_info` est un dictionnaire avec `value_pct` (par exemple l’incertitude moyenne sur la hauteur de plateau, en %). 
+In the current implementation, two main contributions are used:
 
-Pour chaque source, la fonction:
+- a calibration contribution, based on a **relative RMS calibration error**
+  (`rel_rms_pct`) computed from the residuals of the linear fit \(E = aC + b\); [file:153]
+- a sigmoid‑fit contribution, based on the **relative uncertainty of the
+  fitted plateau quantity**, obtained from the covariance matrix of the sigmoid
+  fit. [file:149][file:151]
 
-1. convertit `value_pct` en standard uncertainty relative \(u_\text{rel} = \text{value\_pct} / 100\);
-2. stocke une ligne avec la source, la valeur, l’incertitude et une sensibilité de 1.0;
-3. définit la “contribution” comme \(|u_\text{rel}|\);
-4. calcule l’incertitude combinée:
+For calibration, `calibration_result` may contain:
+
+- either a single field `rel_rms_pct` for a global calibration;
+- or a dictionary of groups, each with its own `rel_rms_pct`. [file:153]
+
+For each available `rel_rms_pct`, the code converts it into a relative
+standard uncertainty
 
 \[
-u_c = \sqrt{\sum_i (\text{contribution}_i)^2}
+u_\text{rel, calib} = \frac{\text{rel\_rms\_pct}}{100}
 \]
 
-Ce bloc doit remplacer toute phrase laissant penser que le code applique “un modèle complet avec coefficients de sensibilité explicites sur toutes les grandeurs”. Le texte doit dire clairement que:
+and adds a row to the budget with sensitivity coefficient equal to 1.0 and
+contribution \(|u_\text{rel, calib}|\). [file:153]
 
-> “The current implementation of the uncertainty budget combines relative contributions provided by each stage (calibration, excitation profiles, sigmoid fit) as independent standard uncertainties and computes the combined uncertainty as the square root of the sum of squares.” 
+For the sigmoid‑fit contribution, the upstream fitting function
+`fit_to_profile` produces, for each profile, a **plateau height**
+`diff_height = L - b` and a scalar uncertainty `sigma_tot` derived from the
+covariance of the parameters \(L\) and \(b\). [file:149] At the GUI level,
+`update_sigmoid_uncertainty_in_appstate` computes an average relative
+uncertainty
+
+\[
+u_\text{rel, sig} = \left\langle \frac{\sigma_\text{tot}}{\text{diff\_height}} \right\rangle
+\]
+
+and stores it as a percentage `value_pct`. [file:151] The uncertainty module
+then converts
+
+\[
+u_\text{rel, sig} = \frac{\text{value\_pct}}{100}
+\]
+
+and adds a corresponding row “Fit sigmoïde (…)” with contribution
+\(|u_\text{rel, sig}|\). [file:151][file:153]
+
+The combined standard uncertainty is finally computed as
+
+\[
+u_c = \sqrt{\sum_i \text{contribution}_i^2}
+\]
+
+where the sum runs over all active contributions (calibration and sigmoid
+fit). [file:153] In other words, the current implementation **assumes the
+listed relative contributions are independent standard uncertainties** and
+computes their combined effect as the square root of the sum of squares.
+
+Pointwise uncertainties on the excitation profiles are not added as a
+separate term in the final budget. Instead, they enter the uncertainty budget
+through the sigmoid fitting step: the profile‑point uncertainties are passed
+to `curve_fit` via the `sigma` argument (with `absolute_sigma=True`), and the
+resulting covariance matrix of the fitted parameters is used to construct the
+sigmoid‑fit contribution. [file:149][file:151]
+
 
 ### 6.7 Statistical Comparison Using ANOVA
 
-Cette section doit aligner exactement les formules sur celles de `ANOVA.py`, comme détaillé en 2.2. 
+The ANOVA module is used to assess whether several groups of scalar results (for example, plateau values from different conditions) can be considered statistically consistent within the experimental repeatability of the measurement chain. 
+The implemented procedure is a **one‑way ANOVA**:
 
-Tu peux garder tout l’habillage sur:
-- test F;
-- hypothèses;
-- vérification via Q‑Q plots, histogrammes, boxplots, violin plots;
-- recours éventuel à Kruskal–Wallis;
+- A one‑factor model is fitted to the data in the form \(\hat{y} = \sum \beta_i G_i + \varepsilon\), where \(G_i\) are group indicators and \(\varepsilon\) is the residual term. 
+- The ANOVA table is computed, and the mean squares associated with the group factor and the residuals are identified as \(MS_\text{inter}\) and \(MS_\text{intra}\), respectively. 
+- An effective number of observations per group is assumed through a fixed parameter \(n_\text{per group} = 5\), consistent with the structure of the datasets used during development. 
 
-mais il faut préciser que:
+From these quantities, the code derives two components of uncertainty:
 
-- la fonction actuelle **ne calcule pas** Kruskal–Wallis elle‑même (tu peux dire que ceci est une perspective ou reste à implémenter si ce n’est pas encore fait dans le GUI); 
-- l’incertitude de type ANOVA est construite avec `n_per_group = 5` fixé en dur et doit donc être utilisée avec prudence pour d’autres tailles d’échantillons. 
+\[
+u_\text{inter} =
+\begin{cases}
+\sqrt{\dfrac{MS_\text{inter} - MS_\text{intra}}{n_\text{per group}}} & \text{if } MS_\text{inter} > MS_\text{intra} \\
+0 & \text{otherwise}
+\end{cases}
+\]
+
+\[
+u_\text{intra} = \sqrt{MS_\text{intra}}
+\]
+
+\[
+u_\text{total} = \sqrt{u_\text{intra}^2 + u_\text{inter}^2}
+\]
+
+\[
+u_\text{rel} = \dfrac{u_\text{total}}{\bar{y}}, \quad u_\text{rel}(\%) = 100 \times u_\text{rel}
+\]
+
+where \(\bar{y}\) is the overall mean of the considered quantity. 
+
+The module also provides diagnostic plots such as histograms, boxplots, violin plots and Q‑Q plots, which help to visually assess normality, homoscedasticity and the presence of outliers in the residuals. Any non‑normal behavior or strong heteroscedasticity should be taken into account when interpreting the ANOVA‑based uncertainty estimate and may justify the use of non‑parametric methods outside the current implementation. 
 
 ---
 
 ## 7. Code Architecture
 
-Les parties de cette section qui décrivent `core/calibration.py`, `core/Loop_fonction.py`, `core/Transform_functions.py`, `core/file_io.py`, `core/ANOVA.py` et `core/uncertainty.py` doivent être ajustées comme suit: 
+The RNRA processing tool is structured as a set of core modules that implement the main scientific operations, plus a graphical interface that orchestrates them and stores intermediate results in a shared application state. 
 
-- `core/file_io.py`: conversion `.mpa` → `.txt` avec extraction de dead time; 
-- `core/calibration.py`: lecture de spectres, fit gaussien + fond linéaire, régression linéaire pondérée; 
-- `core/Loop_fonction.py`: boucle de traitement avec ROI en canaux, utilisation de fichiers Excel de tension/énergie, intégration et normalisation, export Excel; 
-- `core/Traitement_fonctions.py`: intégration ROI et calcul d’incertitudes point par point; 
-- `core/Transform_functions.py`: nettoyage de pics locaux et fit sigmoïde + extraction de paramètres; 
-- `core/uncertainty.py`: agrégation des contributions relatives et calcul d’une incertitude combinée; 
-- `core/ANOVA.py`: ANOVA à un facteur, estimation d’\(u_\text{total}\) et \(u_\text{rel}(\%)\), tracés diagnostics. 
+- **`core/file_io.py`** handles conversion from raw `.mpa` files to `.txt` spectra. It parses the ADC sections, extracts `livetime` and `realtime`, computes a dead‑time factor, and writes a header line followed by channel/count pairs. 
+- **`core/calibration.py`** implements energy‑calibration routines. It reads `.txt` spectra, fits Gaussian peaks with a local linear background, and performs a weighted linear regression \(E = aC + b\), returning calibration coefficients, standard uncertainties, covariance, and quality indicators such as \(R^2\) and a relative RMS error used later in the uncertainty budget. )
+- **`core/Loop_fonction.py`** controls the excitation‑profile processing loop. It reads configuration information from Excel, associates each file index with an energy value from external voltage/energy tables, calls ROI‑integration and normalization functions, and exports excitation profiles to Excel files. 
+- **`core/Traitement_fonctions.py`** carries out ROI integration on gamma spectra, applies dead‑time correction and charge normalization, and propagates uncertainties from counts, calibration/ROI parameters and charge to obtain pointwise uncertainties on \(N/Q\). 
+- **`core/Transform_functions.py`** provides higher‑level transformations, including removal of local build‑up peaks in excitation profiles and sigmoid fitting of processed profiles. It generates cleaned profile files, per‑profile fit data, and plots. It also computes sigmoid‑fit parameters and associated uncertainties (`diff_height`, `sigma_tot`) that feed the uncertainty budget and the ANOVA module. 
+- **`core/uncertainty.py`** builds a compact uncertainty budget from relative contributions provided by the calibration and sigmoid‑fit stages. It converts these contributions into relative standard uncertainties and combines them in quadrature to obtain a global combined uncertainty. )
+- **`core/ANOVA.py`** performs one‑way ANOVA on grouped results, extracts inter‑ and intra‑group variance components, constructs a total and relative uncertainty, and produces diagnostic plots for checking ANOVA assumptions. 
 
-Il faut supprimer ou reformuler tout passage qui affirme que `core/uncertainty.py` “calcule un budget complet avec tous les coefficients de sensibilité explicitement dérivés du modèle” : le code actuel suppose que ces contributions ont déjà été numérisées par les étapes précédentes. 
+The graphical interface (Tkinter tabs) connects these modules, manages file selection and configuration, and stores numerical summaries (e.g. calibration RMS, sigmoid‑fit relative uncertainty) in `app_state`, from which the uncertainty budget window retrieves its inputs. 
 
 ---
 
 ## 8. Limitations
 
-Ta section Limitations est globalement bonne; il suffit de l’aligner avec ce que le code fait réellement. Les points importants à garder ou préciser: 
+The current implementation should be regarded as a first functional version of the RNRA processing workflow rather than a complete, fully generic metrological framework. Several limitations follow directly from the present code design. 
 
-- la calibration suppose un modèle linéaire et des pics bien résolus;
-- le dead-time est basé sur les métadonnées `livetime`/`realtime` des `.mpa`;
-- l’incertitude sur les profils et sur les fits sigmoïdes n’intègre pas tous les biais possibles (dérive de courant, instabilités, inhomogénéités);
-- le budget global combine les contributions comme indépendantes, ce qui n’est pas toujours strictement vrai;
-- `n_per_group = 5` dans ANOVA limite la généricité de la méthode de décomposition de variance;
-- les fichiers Excel d’entrée doivent correspondre exactement au format attendu.
+- **Calibration model.** The energy calibration assumes a strictly linear relation \(E = aC + b\) and well‑resolved Gaussian‑like peaks with a local linear background. Non‑linearities, severe peak overlap, or systematic distortions are not explicitly modeled. 
+- **Dead‑time correction.** The dead‑time factor is computed from `livetime` and `realtime` metadata in the `.mpa` files and applied uniformly to ROI‑integrated counts. Any time dependence of the dead time within an acquisition is not explicitly treated. 
+- **Profile and fit uncertainties.** The uncertainties on excitation profiles and on sigmoid‑fit parameters are constructed from a combination of Poisson statistics, user‑specified calibration/ROI errors and propagated charge uncertainty. Possible additional sources of bias, such as beam‑current drift, detector gain instabilities or sample inhomogeneity, are not explicitly included. 
+- **Independence assumption in the budget.** The global uncertainty budget combines the calibration and sigmoid‑fit contributions as independent standard uncertainties, using the square root of the sum of squares. Correlations between contributions are not modeled, so the combined uncertainty should be interpreted with this simplification in mind. )
+- **Fixed group size in ANOVA.** The ANOVA‑based uncertainty decomposition uses a hard‑coded value \(n_\text{per group} = 5\) when deriving the inter‑group component. The method is therefore tailored to datasets with five replicates per group and may not be directly applicable to arbitrary group sizes without code modification. 
+- **Input format constraints.** The Excel input files used for configuration, energy/voltage tables and processing must conform closely to the expected column names and structure. Deviations from these formats can lead to runtime errors or incorrect data interpretation. 
 
----
+These limitations should be explicitly acknowledged when presenting the tool and when interpreting its outputs in a scientific or metrological context.
 
 ## 9. References
 
-The reference list can remain as in your draft, or be completed, since it is independent from the code. 

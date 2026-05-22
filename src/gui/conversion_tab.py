@@ -201,7 +201,8 @@ class MPAConvertTab(ttk.Frame):
     
         results = convert_mpa_folder(in_dir, out_dir, progress_callback=progress_callback)
         self.app_data["conversion_results"] = results
-    
+        print("DEBUG conversion_results =", self.app_data["conversion_results"])
+        print("DEBUG app_data id =", id(self.app_data))
         # Résumé
         if results["success"]:
             self.status_label.config(

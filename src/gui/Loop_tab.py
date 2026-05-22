@@ -44,7 +44,8 @@ class loop_tab(ttk.Frame):
         self.ecenter_var = tk.DoubleVar(value=self.default_ecenter)
         self.window_var = tk.DoubleVar(value=self.default_window)
         self.half_width_var = tk.DoubleVar(value=self.default_half_width)
-
+        self.eject_group = tk.StringVar(value="")
+        self.selected_eject_groups = None
         self.has_boucle =False
         self.has_peak_remove = False
         self.save_cleaned_var = tk.BooleanVar(value=True) 
@@ -142,7 +143,10 @@ class loop_tab(ttk.Frame):
 
         ttk.Label(ejec_frame, text="Largeur à supprimer (keV) :").grid(row=2, column=0, sticky="w")
         ttk.Entry(ejec_frame, textvariable=self.half_width_var, width=10).grid(row=2, column=1, sticky="w",)
-       
+        
+        ttk.Label(ejec_frame, text = 'Groupe à traiter (laisser vide pour tous) :').grid(row=3, column=0, sticky="w")
+        ttk.Entry(ejec_frame, textvariable=self.eject_group, width=10).grid(row=3, column=1, sticky="w")
+        
         ttk.Button(ejec_frame,
                    text = "Supprimer le pic build-up",
                    command =self.run_remove_carbon_peak).grid(row = 4, column = 0, columnspan =2 , pady =5)
@@ -780,6 +784,12 @@ class loop_tab(ttk.Frame):
         imagefolder = os.path.join(outpufolder, "images")
 
         try:
+            raw_groups = self.eject_group.get().strip()
+            if raw_groups: 
+                selected_groupes =[g.strip() for g in raw_groups.split(",") if g.strip()]
+            else: 
+                selected_groupes = None
+            self.selected_eject_groups = selected_groupes
             remove_peak_by_energy(
                 input_folder=base_folder,
                 output_folder=outpufolder,
@@ -787,6 +797,7 @@ class loop_tab(ttk.Frame):
                 log_callback=self.log,
                 ecenter=ecenter,
                 window=window,
+                selected_groups = selected_groupes
             )
             self.has_peak_remove = True
             self.log(f"Suppression du pic terminée pour tous les profils de {base_folder}")
@@ -797,6 +808,8 @@ class loop_tab(ttk.Frame):
             )
             
     def run_fit(self):
+        import shutil
+
         if not self.has_boucle:
             messagebox.showerror("Erreur", "Lance d'abord la boucle de traitement.")
             return
@@ -806,28 +819,80 @@ class loop_tab(ttk.Frame):
             messagebox.showerror("Erreur", f"Dossier de sortie invalide :\n{base_folder}")
             return
 
-        if self.has_peak_remove:
-            inputfolder = os.path.join(base_folder, "filtered")
-        else:
-            inputfolder = base_folder
-        
-        self.update_sigmoid_uncertainty_in_appstate(os.path.join(inputfolder, "fit_results.xlsx"))
-        
-        if not os.path.isdir(inputfolder):
-            messagebox.showerror("Erreur", f"Dossier d'entrée pour le fit introuvable :\n{inputfolder}")
-            return
-
-        outpufolder = os.path.join(inputfolder, "fit_sigmoid")
+        filtered_folder = os.path.join(base_folder, "filtered")
+        fit_input_folder = os.path.join(base_folder, "fit_input")
 
         try:
+            # Recréer le dossier mixte proprement
+            os.makedirs(fit_input_folder, exist_ok=True)
+
+            for f in os.listdir(fit_input_folder):
+                path = os.path.join(fit_input_folder, f)
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                    elif os.path.isdir(path):
+                        shutil.rmtree(path)
+                except Exception as e:
+                    self.log(f"Impossible de supprimer {path} : {e}")
+            
+            # 1) Copier tous les profils de base
+            base_files = [
+                f for f in os.listdir(base_folder)
+                if f.endswith(".xlsx")
+            ]
+
+            for f in base_files:
+                src = os.path.join(base_folder, f)
+                dst = os.path.join(fit_input_folder, f)
+                shutil.copy2(src, dst)
+
+            # 2) Si des pics ont été supprimés, remplacer les groupes concernés
+            if self.has_peak_remove and os.path.isdir(filtered_folder):
+                cleaned_files = [
+                    f for f in os.listdir(filtered_folder)
+                    if f.endswith("_cleaned.xlsx")
+                ]
+
+                for cleaned_file in cleaned_files:
+                    src_cleaned = os.path.join(filtered_folder, cleaned_file)
+
+                    base_name = cleaned_file.removesuffix("_cleaned.xlsx") + ".xlsx"
+                    dst = os.path.join(fit_input_folder, cleaned_file)
+
+                    group = cleaned_file.split("_")[0]
+
+                    if self.selected_eject_groups is None:
+                        # cas : tous les groupes ont été filtrés
+                        original_path = os.path.join(fit_input_folder, base_name)
+                        if os.path.exists(original_path):
+                            os.remove(original_path)
+                        shutil.copy2(src_cleaned, dst)
+
+                    elif group in self.selected_eject_groups:
+                        # cas : seulement certains groupes ont été filtrés
+                        original_path = os.path.join(fit_input_folder, base_name)
+                        if os.path.exists(original_path):
+                            os.remove(original_path)
+                        shutil.copy2(src_cleaned, dst)
+
+            outpufolder = os.path.join(fit_input_folder, "fit_sigmoid")
+
             fit_to_profile(
-                folder_input=inputfolder,
+                folder_input=fit_input_folder,
                 output_path=outpufolder,
                 log_callback=self.log,
             )
+
+            self.update_sigmoid_uncertainty_in_appstate(
+                os.path.join(fit_input_folder, "fit_results.xlsx")
+            )
+
+            self.log(f"Fit sigmoïde terminé à partir de : {fit_input_folder}")
+
         except Exception as e:
             messagebox.showerror(
                 "Erreur",
                 f"Une erreur est survenue lors du fit sigmoïde :\n{e}",
             )
-            
+       
