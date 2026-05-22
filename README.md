@@ -74,7 +74,10 @@ Current implementation details:
   - `u_total = sqrt(u_intra**2 + u_inter**2)`,
   - `u_rel_percent = 100 * u_total / mean(value)`.
 
-> **Important:** because `n_per_group` is currently fixed to 5 in the implementation, the ANOVA-based uncertainty estimate is numerically consistent with experiments that use five repeated measurements per group. For other group sizes, the numerical value should be interpreted with care or the code should be adapted accordingly.
+> **Important:** the ANOVA-based uncertainty estimate relies on the assumed group
+structure and on the usual ANOVA assumptions (approximate normality and
+homoscedasticity of residuals). Users should check the number of repetitions
+per group and the diagnostic plots when interpreting the result.
 
 ### Important caution
 
@@ -239,7 +242,12 @@ The software includes uncertainty handling at several key stages:
   The covariance matrix of the fit is used to build a global measure of uncertainty on plateau-related parameters, which is stored as a relative contribution in the budget. 
 
 - **Global budget**:  
-  The module `core/uncertainty.py` takes relative contributions from calibration, excitation curves and sigmoid fit (all expressed in percent), converts them to standard relative uncertainties, and combines them in quadrature to obtain a combined relative uncertainty. 
+  The module `core/uncertainty.py` takes relative contributions from the
+  calibration stage and from the sigmoid-fit stage (both expressed in percent),
+  converts them to standard relative uncertainties, and combines them in
+  quadrature to obtain a combined relative uncertainty. The profile-point
+  uncertainties enter the budget through the weighted sigmoid fit and are not
+  added again as a separate contribution. 
 
 This uncertainty treatment is intended as a **practical processing model** for scientific analysis. It should not yet be interpreted as a complete metrological uncertainty budget covering all possible systematic effects (e.g. long-term drifts, detector instabilities, sample inhomogeneity). 
 
@@ -251,7 +259,11 @@ This uncertainty treatment is intended as a **practical processing model** for s
 - Dead-time correction relies on metadata extracted from `.mpa` files; missing, inconsistent or corrupted headers may lead to a default factor of 1.0 and reduce correction accuracy.
 - The current uncertainty model is simplified and does not include all potential systematic contributions relevant for a full metrological analysis. 
 - Peak removal and sigmoid fitting are sensitive to noisy profiles and to the choice of window parameters; results should always be checked visually. 
-- ANOVA-based uncertainty estimation assumes a one-way model and currently uses a fixed number of observations per group in the variance decomposition.
+- ANOVA-based uncertainty estimation assumes a one-way model and relies on
+  the chosen group structure and on the way an effective number of observations
+  per group is defined in the current implementation. The method is therefore
+  tailored to the experimental designs used during development and may need
+  adaptation for more general cases.
 - Input Excel files must follow the expected column structure required by each processing tab; otherwise, the processing loop may fail or skip entries.
 
 ---
