@@ -49,7 +49,9 @@ class loop_tab(ttk.Frame):
         self.has_boucle =False
         self.has_peak_remove = False
         self.save_cleaned_var = tk.BooleanVar(value=True) 
- 
+        
+        self.max_en = tk.DoubleVar(value=7000.0)
+        self.min_en = tk.DoubleVar(value=0.0)  
         # Configure l'interface
         self.setup_ui()
     
@@ -151,6 +153,18 @@ class loop_tab(ttk.Frame):
                    text = "Supprimer le pic build-up",
                    command =self.run_remove_carbon_peak).grid(row = 4, column = 0, columnspan =2 , pady =5)
         
+        
+        eject_range = ttk.LabelFrame(left_frame, text="Suppresion de point dans un range d'energie")
+        eject_range.pack(fill='x', pady=5)
+        ttk.Label(eject_range, text="Energie maximum(keV) : ").grid(row=0, column=0, sticky="w")
+        ttk.Entry(eject_range, textvariable=self.max_en, width=10).grid(row=0, column=1, sticky="w")
+        ttk.Label(eject_range, text="Energie minimum(keV) : ").grid(row=1, column=0, sticky="w")
+        ttk.Entry(eject_range, textvariable=self.min_en, width=10).grid(row=1, column=1, sticky="w")
+                
+        ttk.Button(eject_range,
+                    text = "Supprimer les points dans le range",
+                    command = self.run_remove_points_in_range).grid(row=2, column=0, columnspan=2, pady=5)
+        
         fit_frame = ttk.LabelFrame(left_frame, text ="Fit Sigmoïde")
         fit_frame.pack(fill='x', pady=5)
         ttk.Button(
@@ -197,6 +211,81 @@ class loop_tab(ttk.Frame):
         
         self.refresh_from_app_state()
    
+    def run_remove_points_in_range(self):
+        if not self.has_boucle:
+            messagebox.showerror("Erreur", "Scenario non traité : Lancer boucle traitement.")
+            return
+    
+        base_folder = self.output_dir_var.get()
+        if not base_folder or not os.path.isdir(base_folder):
+            messagebox.showerror("Erreur", f"Dossier de sortie invalide :\n{base_folder}")
+            return
+    
+        max_e = self.max_en.get()
+        min_e = self.min_en.get()
+    
+        print(f"Suppression des points dans le range {min_e} - {max_e} keV")
+        print(type(max_e), type(min_e))
+        print(base_folder)
+    
+        if min_e >= max_e:
+            messagebox.showerror("Erreur", "Energie minimum doit être inférieure à énergie maximum.")
+            return
+    
+        exit_folder = os.path.join(base_folder, "filtered")
+        os.makedirs(exit_folder, exist_ok=True)
+    
+        n_saved = 0
+        last_exit_path = None
+    
+        for fname in os.listdir(base_folder):
+            if not fname.endswith(".xlsx") or fname.endswith("_cleaned.xlsx"):
+                continue
+            
+            path = os.path.join(base_folder, fname)
+            exit_path = os.path.join(
+                exit_folder,
+                os.path.splitext(fname)[0] + "_cleaned.xlsx"
+            )
+    
+            try:
+                df = pd.read_excel(path)
+            except Exception as e:
+                print(f"Impossible de lire {fname}: {e}")
+                continue
+            
+            if {"Energie(keV)", "N/C"}.issubset(df.columns):
+                df_clean = df.copy()
+    
+                df_clean["Energie(keV)"] = pd.to_numeric(df_clean["Energie(keV)"], errors="coerce")
+                df_clean["N/C"] = pd.to_numeric(df_clean["N/C"], errors="coerce")
+    
+                mask_remove = (
+                    np.isfinite(df_clean["Energie(keV)"]) &
+                    (df_clean["Energie(keV)"] >= min_e) &
+                    (df_clean["Energie(keV)"] <= max_e)
+                )
+    
+                df_clean = df_clean.loc[~mask_remove].copy()
+    
+                try:
+                    df_clean.to_excel(exit_path, index=False)
+                    n_saved += 1
+                    last_exit_path = exit_path
+                except Exception as e:
+                    print(f"Impossible de sauvegarder {exit_path}: {e}")
+                    continue
+                
+        self.has_peak_remove = True
+    
+        if n_saved > 0:
+            self.log(
+                f"Points dans le range {min_e} - {max_e} keV supprimés. "
+                f"{n_saved} fichiers sauvegardés dans {exit_folder}"
+            )
+        else:
+            self.log("Aucun fichier sauvegardé.")
+    
     def _invoke_focused_button(self, event=None):
         widget = self.focus_get()
         if isinstance(widget, ttk.Button):

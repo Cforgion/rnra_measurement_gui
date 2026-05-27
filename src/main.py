@@ -24,7 +24,7 @@ class RNRAApp(tk.Tk):
         super().__init__()
         
         self.title("RNRA Data Analysis - Université de Namur")
-        self.geometry("1200x800")
+        self.geometry("1500x1000")
         
         # État partagé entre tous les tabs
         self.app_state = {

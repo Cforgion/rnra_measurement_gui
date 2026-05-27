@@ -25,7 +25,7 @@ def remove_peak_by_energy(input_folder, output_folder, image_folder, log_callbac
         os.makedirs(image_folder)
 
     files = [f for f in os.listdir(input_folder) if f.endswith(".xlsx")]
-    print(f"files: {files}")
+    #print(f"files: {files}")
 
     if selected_groups:
         selected_groups = set(str(g) for g in selected_groups)
