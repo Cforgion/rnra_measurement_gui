@@ -496,7 +496,9 @@ The graphical interface (Tkinter tabs) connects these modules, manages file sele
 
 ## 8. Limitations
 
-The current implementation should be regarded as a first functional version of the RNRA processing workflow rather than a complete, fully generic metrological framework. Several limitations follow directly from the present code design. 
+The current implementation should be regarded as a first functional version of the RNRA processing workflow rather than a complete, fully generic metrological framework. Several limitations follow directly from the present code design.
+
+The current implementation assumes the use of the standard analog acquisition chain. Measurements acquired with the digital acquisition chain are only used through converted spectrum files, and no dedicated uncertainty contribution is assigned to the digital electronics. Any effects specific to the digital chain (internal processing, digitization settings, export format) are therefore not explicitly quantified in the present uncertainty model and should be considered outside the validated protocol. 
 
 - **Calibration model.** The energy calibration assumes a strictly linear relation \(E = aC + b\) and well‑resolved Gaussian‑like peaks with a local linear background. Non‑linearities, severe peak overlap, or systematic distortions are not explicitly modeled. 
 - **Dead‑time correction.** The dead‑time factor is computed from `livetime` and `realtime` metadata in the `.mpa` files and applied uniformly to ROI‑integrated counts. Any time dependence of the dead time within an acquisition is not explicitly treated. 

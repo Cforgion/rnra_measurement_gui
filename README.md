@@ -254,7 +254,7 @@ This uncertainty treatment is intended as a **practical processing model** for s
 ---
 
 ## Limitations
-
+- Digital acquisition chain: measurements acquired with the digital acquisition chain are not covered by the current validation. The uncertainty model and workflow are defined for the standard analog acquisition setup.
 - The calibration model currently assumes a predominantly linear detector response over the selected energy range.
 - Dead-time correction relies on metadata extracted from `.mpa` files; missing, inconsistent or corrupted headers may lead to a default factor of 1.0 and reduce correction accuracy.
 - The current uncertainty model is simplified and does not include all potential systematic contributions relevant for a full metrological analysis. 

@@ -117,10 +117,9 @@ class RNRAApp(tk.Tk):
     def show_uncertainty_budget(self):
         try:
             budget = compute_uncertainty_budget(
-                calibration_result=self.app_state.get("calibration_results"),
-                excitation_info=self.app_state.get("uncertainty_budget", {}).get("excitation_curve"),
-                sigmoid_info=self.app_state.get("uncertainty_budget", {}).get("sigmoid_fit"),
-            )
+            calibration_result=self.app_state.get("calibration_results"),
+            sigmoid_info=self.app_state["uncertainty_budget"].get("sigmoid_fit"),
+        )
 
             conversion_results = self.app_state.get("conversion_results")
             files_data = conversion_results.get("files_data", []) if conversion_results else []
