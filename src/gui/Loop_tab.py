@@ -748,6 +748,7 @@ class loop_tab(ttk.Frame):
             self.roi_label.config(text=f"ROI non définie")
     
     def run_loop(self):
+        
         scenarios = self.charger_config_loop()
         if not scenarios:
             messagebox.showerror("Erreur", "Aucun scénario chargé.")

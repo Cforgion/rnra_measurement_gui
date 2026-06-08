@@ -441,7 +441,7 @@ class anova_tab(ttk.Frame):
                 plt.figure()
                 sns.violinplot(x=data[group_col], y=residus)
                 plt.title("Violinplot des résidus")
-
+                plt.ylabel("residuals")
                 if self.save_var.get():
                     path = os.path.join(self.output_dir_var.get(), "violinplot.png")
                     plt.savefig(path)

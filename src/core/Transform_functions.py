@@ -155,8 +155,8 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
     image_dir = os.path.join(output_path, "fit_images")
     os.makedirs(excel_dir, exist_ok=True)
     os.makedirs(image_dir, exist_ok=True)
-    print("Fichier ciblé :", output_file)
-    print("Existe :", os.path.exists(output_file))
+    #print("Fichier ciblé :", output_file)
+    #print("Existe :", os.path.exists(output_file))
     if os.path.exists(output_file):
         os.remove(output_file)
         
@@ -171,6 +171,11 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
     
     files = [f for f in os.listdir(folder_input) if f.endswith(".xlsx")]
     #print(f"files: {files}")
+    ratios      = []   # stocker les ratios au fur et à mesure
+    u_mean_list = []
+    u_fit_list  = []
+
+
     for file in files:
     
         log(f"Processing {file}...")
@@ -220,6 +225,7 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
                 method='dogbox', maxfev=10000,
                 bounds=([-np.inf, min(x)-10, 0, -np.inf], [np.inf, max(x)+10, np.inf, np.inf])
             )
+            
         except Exception as e:
             log(f"❌ {file}: curve_fit échoué {e}")
             continue
@@ -231,14 +237,72 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
         
         y_pred =sigmoid(x, *popt)
         r2 = calculate_r2(y, y_pred)
-        perr = np.diag(pcov)
+        var_params = np.diag(pcov)
+        u_params = np.sqrt(var_params)
+
+        u_L  = u_params[0]
+        u_x0 = u_params[1]
+        u_k  = u_params[2]
+        u_b  = u_params[3]
+
+        u_H_fit_corr = np.sqrt(pcov[0,0] + pcov[3,3] - 2*pcov[0,3])
         
-        Ucc_tot = np.sqrt(perr[0] + perr[3])
         
         group = assign_group(file)
         df_final.loc[len(df_final.index)]=[
-            file, L, b, xc ,k,Real_height,Ucc_tot,group
+            file, L, b, xc ,k,Real_height,u_H_fit_corr,group
         ]
+
+        # ── Méthode quantiles (indépendante du fit) ─────────────────────────
+        q_low  = np.quantile(x, 0.125)   # frontière basse : 1er quartile
+        q_high = np.quantile(x, 0.65)   # frontière haute : 3e quartile
+
+        mask_bas  = x < q_low
+        mask_haut = x > q_high
+        n_bas     = np.sum(mask_bas)
+        n_haut    = np.sum(mask_haut)
+
+        if n_haut >= 2 and n_bas >= 2:
+            # Moyennes pondérées par les incertitudes
+            w_haut = 1.0 / y_error[mask_haut]**2
+            w_bas  = 1.0 / y_error[mask_bas]**2
+
+            mu_haut = np.sum(w_haut * y[mask_haut]) / np.sum(w_haut)
+            mu_bas  = np.sum(w_bas  * y[mask_bas])  / np.sum(w_bas)
+
+            # Incertitudes sur les moyennes pondérées
+            u_mu_haut = np.sqrt(1.0 / np.sum(w_haut))
+            u_mu_bas  = np.sqrt(1.0 / np.sum(w_bas))
+
+            H_mean        = mu_haut - mu_bas
+            u_H_mean      = np.sqrt(u_mu_haut**2 + u_mu_bas**2)
+            u_H_mean_pct  = u_H_mean / H_mean * 100.0
+
+            # H depuis curve_fit (avec correction covariance)
+            H_fit        = L - b          # = Real_height
+            u_H_fit_corr = np.sqrt(pcov[0,0] + pcov[3,3] - 2*pcov[0,3])
+            u_H_fit_pct  = u_H_fit_corr / H_fit * 100.0
+
+            #print(f"\n{'─'*55}")
+            #print(f"Fichier : {file}")
+            #print(f"Fichier : {file}")
+            #print(f"  Quantiles : Q25 = {q_low:.1f} keV  |  Q75 = {q_high:.1f} keV")
+            #print(f"  x0_fit = {xc:.1f} keV  (info seulement, non utilisé pour H)")
+            #print(f"  Points plateau haut : {n_haut}   |   plateau bas : {n_bas}")
+            #print(f"  μ_haut = {mu_haut:.3f}   μ_bas = {mu_bas:.3f}")
+            #print(f"  ── Méthode moyennes ──────────────────────────────")
+            #print(f"     H        = {H_mean:.3f}  ±  {u_H_mean:.3f}  ({u_H_mean_pct:.2f} %)")
+            #print(f"  ── curve_fit (avec correction cov) ───────────────")
+            #print(f"     H        = {H_fit:.3f}  ±  {u_H_fit_corr:.3f}  ({u_H_fit_pct:.2f} %)")
+            #print(f"  ── Ratio u_fit / u_mean ──────────────────────────")
+            #print(f"     facteur  = {u_H_fit_corr / u_H_mean:.2f}x")
+            #print(f"{'─'*55}")
+            ratios.append(u_H_fit_corr / u_H_mean)
+            u_mean_list.append(u_H_mean_pct)
+            u_fit_list.append(u_H_fit_pct)
+        else:
+            print(f"⚠️  {file} : plateaux insuffisants "
+                  f"(n_haut={n_haut}, n_bas={n_bas}) — marge réduite à 1/k")
         
         x_fit = np.linspace(min(x), max(x), 500)
         yfit = sigmoid(x_fit, *popt)
@@ -274,5 +338,15 @@ def fit_to_profile(folder_input,output_path,log_callback =None ) :
         plt.close()
         df_plot.to_excel(output_excel, index=False)
     df_final.to_excel(output_file, index=False)
+    print(f"\n{'═'*55}")
+    print(f"SYNTHÈSE GLOBALE ({len(ratios)} fichiers)")
+    print(f"  u(H) méthode quantiles : {np.mean(u_mean_list):.3f} %")
+    print(f"  u(H) méthode quantiles : {np.median(u_mean_list):.3f} % (médiane)")
+    print(f"  u(H) curve_fit corrigé : {np.mean(u_fit_list):.3f} %")
+    print(f"  Ratio moyen            : {np.mean(ratios):.2f}×")
+    print(f"  Ratio médian           : {np.median(ratios):.2f}×")
+    print(f"  Min u(H)               : {np.min(u_mean_list):.3f} %")
+    print(f"  Max u(H)               : {np.max(u_mean_list):.3f} %")
+    print(f"{'═'*55}")
     log(f"✅ Processing completed.")
 
